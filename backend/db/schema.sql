@@ -10,12 +10,26 @@ DROP TABLE IF EXISTS tables CASCADE;
 DROP TYPE IF EXISTS order_status CASCADE;
 DROP TYPE IF EXISTS table_status CASCADE;
 
+DROP TABLE IF EXISTS restaurants CASCADE;
+
+-- ============================================================
+-- RESTAURANTS
+-- ============================================================
+CREATE TABLE restaurants (
+  id            SERIAL PRIMARY KEY,
+  name          VARCHAR(255) NOT NULL,
+  username      VARCHAR(100) NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 -- ============================================================
 -- MENU ITEMS
 -- ============================================================
 CREATE TABLE menu_items (
-  id           SERIAL PRIMARY KEY,
-  category     VARCHAR(100) NOT NULL,          -- e.g. 'main-course', 'appetizers'
+  id            SERIAL PRIMARY KEY,
+  restaurant_id INT NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  category      VARCHAR(100) NOT NULL,          -- e.g. 'main-course', 'appetizers'
   name         VARCHAR(200) NOT NULL,
   description  TEXT,
   price        NUMERIC(10, 2) NOT NULL,
@@ -33,12 +47,14 @@ CREATE INDEX idx_menu_items_category ON menu_items(category);
 CREATE TYPE table_status AS ENUM ('open', 'occupied', 'closed');
 
 CREATE TABLE tables (
-  id         SERIAL PRIMARY KEY,
-  number     INT NOT NULL UNIQUE,
+  id            SERIAL PRIMARY KEY,
+  restaurant_id INT NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  number        INT NOT NULL,
   capacity   INT NOT NULL DEFAULT 4,
   status     table_status NOT NULL DEFAULT 'open',  -- open | occupied | closed
   is_active  BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(restaurant_id, number)
 );
 
 -- ============================================================
@@ -47,9 +63,10 @@ CREATE TABLE tables (
 CREATE TYPE order_status AS ENUM ('pending', 'confirmed', 'preparing', 'ready', 'delivered', 'cancelled');
 
 CREATE TABLE orders (
-  id         SERIAL PRIMARY KEY,
-  table_id   INT NOT NULL REFERENCES tables(id) ON DELETE RESTRICT,
-  status     order_status NOT NULL DEFAULT 'pending',
+  id            SERIAL PRIMARY KEY,
+  restaurant_id INT NOT NULL REFERENCES restaurants(id) ON DELETE CASCADE,
+  table_id      INT NOT NULL REFERENCES tables(id) ON DELETE RESTRICT,
+  status        order_status NOT NULL DEFAULT 'pending',
   notes      TEXT,
   total      NUMERIC(10, 2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

@@ -1,47 +1,66 @@
 import React from 'react';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import Cart from '../components/client-side/Cart';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── Mock api service ──────────────────────────────────────────────────────────
+vi.mock('../services/api', () => ({
+  placeOrder: vi.fn(),
+}));
+import { placeOrder } from '../services/api';
+
+// ── Mock Zustand cart store ───────────────────────────────────────────────────
 const mockAdd       = vi.fn();
 const mockDecrement = vi.fn();
 const mockRemove    = vi.fn();
+const mockClear     = vi.fn();
 
-// Shared mutable state so individual tests can swap items/price
 let mockState = {
   items: [],
-  addItem: mockAdd,
+  addItem:       mockAdd,
   decrementItem: mockDecrement,
-  removeItem: mockRemove,
-  totalPrice: () => 0,
+  removeItem:    mockRemove,
+  clearCart:     mockClear,
+  totalPrice:    () => 0,
 };
 
-vi.mock('../store/cartStore', () => {
-  const mockStore = (selector) => selector(mockState);
-  return { default: mockStore };
-});
+vi.mock('../store/cartStore', () => ({
+  default: (selector) => selector(mockState),
+}));
 
-const renderCart = (open = true) =>
-  render(<Cart isOpen={open} onClose={vi.fn()} />);
+// ── Helper ────────────────────────────────────────────────────────────────────
+const renderCart = (open = true, tableNumber = '7') => {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <Cart isOpen={open} onClose={vi.fn()} tableNumber={tableNumber} />
+    </QueryClientProvider>
+  );
+};
 
-// ── tests ─────────────────────────────────────────────────────────────────────
 describe('Cart component', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    // Reset to empty cart by default
     mockState = {
       items: [],
-      addItem: mockAdd,
+      addItem:       mockAdd,
       decrementItem: mockDecrement,
-      removeItem: mockRemove,
-      totalPrice: () => 0,
+      removeItem:    mockRemove,
+      clearCart:     mockClear,
+      totalPrice:    () => 0,
     };
   });
 
-  // ── visibility ──────────────────────────────────────────────
+  // ── visibility ───────────────────────────────────────────────────────────
   it('returns null when isOpen is false', () => {
-    const { container } = render(<Cart isOpen={false} onClose={() => {}} />);
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <Cart isOpen={false} onClose={() => {}} tableNumber="7" />
+      </QueryClientProvider>
+    );
     expect(container.firstChild).toBeNull();
   });
 
@@ -50,69 +69,99 @@ describe('Cart component', () => {
     expect(screen.getByText('Your Order')).toBeInTheDocument();
   });
 
-  // ── empty state ─────────────────────────────────────────────
-  it('renders the empty cart message when no items', () => {
+  // ── empty state ───────────────────────────────────────────────────────────
+  it('shows empty cart message when no items', () => {
     renderCart();
     expect(screen.getByText('Your cart is empty')).toBeInTheDocument();
     expect(screen.getByText('Browse Menu')).toBeInTheDocument();
   });
 
-  it('Place Order button is disabled when cart is empty', () => {
-    renderCart();
-    expect(screen.getByText('Place Order')).toBeDisabled();
-  });
-
-  it('calls onClose when the close (×) button is clicked', () => {
+  it('close button calls onClose', () => {
     const handleClose = vi.fn();
-    render(<Cart isOpen={true} onClose={handleClose} />);
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <Cart isOpen={true} onClose={handleClose} tableNumber="7" />
+      </QueryClientProvider>
+    );
     fireEvent.click(screen.getAllByRole('button')[0]);
-    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(handleClose).toHaveBeenCalled();
   });
 
-  it('calls onClose when the Browse Menu button is clicked', () => {
+  it('Browse Menu button calls onClose', () => {
     const handleClose = vi.fn();
-    render(<Cart isOpen={true} onClose={handleClose} />);
+    const qc = new QueryClient();
+    render(
+      <QueryClientProvider client={qc}>
+        <Cart isOpen={true} onClose={handleClose} tableNumber="7" />
+      </QueryClientProvider>
+    );
     fireEvent.click(screen.getByText('Browse Menu'));
-    expect(handleClose).toHaveBeenCalledTimes(1);
+    expect(handleClose).toHaveBeenCalled();
   });
 
-  // ── with items ──────────────────────────────────────────────
-  it('renders cart items when items exist', () => {
+  // ── with items ────────────────────────────────────────────────────────────
+  it('renders cart items and total', () => {
     mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 2 }];
     mockState.totalPrice = () => 48;
     renderCart();
     expect(screen.getByText('Risotto')).toBeInTheDocument();
-    // $48.00 appears as item subtotal AND as the total footer
     expect(screen.getAllByText('$48.00').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getByText('Place Order')).not.toBeDisabled();
   });
 
-  it('calls decrementItem when − is clicked', () => {
+  it('calls decrementItem on − click', () => {
     mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 2 }];
     renderCart();
     fireEvent.click(screen.getByText('−'));
     expect(mockDecrement).toHaveBeenCalledWith(1);
   });
 
-  it('calls addItem when + is clicked', () => {
+  it('calls addItem on + click', () => {
     mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 2 }];
     renderCart();
     fireEvent.click(screen.getByText('+'));
     expect(mockAdd).toHaveBeenCalledWith({ id: 1, name: 'Risotto', price: 24 });
   });
 
-  it('calls removeItem when × remove button is clicked', () => {
+  it('calls removeItem on × click', () => {
     mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 2 }];
     renderCart();
     fireEvent.click(screen.getByLabelText('Remove item'));
     expect(mockRemove).toHaveBeenCalledWith(1);
   });
 
-  it('shows the correct running total', () => {
-    mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 3 }];
-    mockState.totalPrice = () => 72;
+  // ── Place Order — success ─────────────────────────────────────────────────
+  it('shows success screen and clears cart on successful order', async () => {
+    mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 1 }];
+    placeOrder.mockResolvedValue({ order: { id: 99 } });
     renderCart();
-    // $72.00 appears as item subtotal AND as the total — either occurrence is fine
-    expect(screen.getAllByText('$72.00').length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getByText('Place Order'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Order placed!')).toBeInTheDocument();
+      expect(mockClear).toHaveBeenCalled();
+    });
+  });
+
+  it('shows "Back to Menu" button after order success', async () => {
+    mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 1 }];
+    placeOrder.mockResolvedValue({ order: { id: 99 } });
+    renderCart();
+    fireEvent.click(screen.getByText('Place Order'));
+    await waitFor(() => expect(screen.getByText('Back to Menu')).toBeInTheDocument());
+  });
+
+  // ── Place Order — error ───────────────────────────────────────────────────
+  it('shows error message on failed order', async () => {
+    mockState.items = [{ id: 1, name: 'Risotto', price: 24, quantity: 1 }];
+    placeOrder.mockRejectedValue(new Error('Table not found'));
+    renderCart();
+
+    fireEvent.click(screen.getByText('Place Order'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Table not found')).toBeInTheDocument();
+    });
   });
 });

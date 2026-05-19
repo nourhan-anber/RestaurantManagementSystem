@@ -80,4 +80,83 @@ router.patch('/:number/close-bill', async (req, res) => {
   }
 });
 
+// POST /api/tables — create a new table
+router.post('/', async (req, res) => {
+  try {
+    const { number, capacity, is_active } = req.body;
+    
+    if (!number || capacity === undefined) {
+      return res.status(400).json({ error: 'Number and capacity are required' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO tables (number, capacity, is_active)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [number, capacity, is_active ?? true]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating table:', error);
+    if (error.code === '23505') { // unique violation
+      return res.status(409).json({ error: 'Table number already exists' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/tables/:id — update an existing table
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { number, capacity, is_active } = req.body;
+
+    if (!number || capacity === undefined) {
+      return res.status(400).json({ error: 'Number and capacity are required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE tables 
+       SET number = $1, capacity = $2, is_active = $3
+       WHERE id = $4
+       RETURNING *`,
+      [number, capacity, is_active ?? true, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Table not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating table:', error);
+    if (error.code === '23505') { // unique violation
+      return res.status(409).json({ error: 'Table number already exists' });
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/tables/:id — soft delete (set is_active to false)
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const result = await pool.query(
+      `UPDATE tables SET is_active = FALSE WHERE id = $1 RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Table not found' });
+    }
+
+    res.json({ message: 'Table deactivated', table: result.rows[0] });
+  } catch (error) {
+    console.error('Error deleting table:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;

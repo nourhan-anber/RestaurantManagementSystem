@@ -118,6 +118,59 @@ describe('PATCH /api/tables/:number/close-bill', () => {
   });
 });
 
+// ── POST /api/tables ─────────────────────────────────────────────────────────
+describe('POST /api/tables', () => {
+  it('creates a new table', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([{ id: 10, number: 10, capacity: 4, is_active: true }]));
+    const res = await request(app).post('/api/tables').send({ number: 10, capacity: 4 });
+    expect(res.status).toBe(201);
+    expect(res.body.number).toBe(10);
+  });
+
+  it('returns 400 if missing number or capacity', async () => {
+    const res = await request(app).post('/api/tables').send({ number: 10 });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 409 if table number exists', async () => {
+    pool.query.mockRejectedValueOnce({ code: '23505' });
+    const res = await request(app).post('/api/tables').send({ number: 10, capacity: 4 });
+    expect(res.status).toBe(409);
+  });
+});
+
+// ── PUT /api/tables/:id ──────────────────────────────────────────────────────
+describe('PUT /api/tables/:id', () => {
+  it('updates an existing table', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([{ id: 10, number: 10, capacity: 6, is_active: true }]));
+    const res = await request(app).put('/api/tables/10').send({ number: 10, capacity: 6 });
+    expect(res.status).toBe(200);
+    expect(res.body.capacity).toBe(6);
+  });
+
+  it('returns 404 if table not found', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([]));
+    const res = await request(app).put('/api/tables/999').send({ number: 10, capacity: 6 });
+    expect(res.status).toBe(404);
+  });
+});
+
+// ── DELETE /api/tables/:id ───────────────────────────────────────────────────
+describe('DELETE /api/tables/:id', () => {
+  it('deactivates an existing table', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([{ id: 10, is_active: false }]));
+    const res = await request(app).delete('/api/tables/10');
+    expect(res.status).toBe(200);
+    expect(res.body.table.is_active).toBe(false);
+  });
+
+  it('returns 404 if table not found', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([]));
+    const res = await request(app).delete('/api/tables/999');
+    expect(res.status).toBe(404);
+  });
+});
+
 // ── GET /api/health ──────────────────────────────────────────────────────────
 describe('GET /api/health', () => {
   it('returns ok status', async () => {

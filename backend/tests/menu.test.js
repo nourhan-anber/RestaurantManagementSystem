@@ -15,9 +15,9 @@ import app from '../app.js';
 
 const makeRows = (rows) => ({ rows, rowCount: rows.length });
 
-describe('GET /api/menu', () => {
-  beforeEach(() => vi.clearAllMocks());
+beforeEach(() => vi.clearAllMocks());
 
+describe('GET /api/menu', () => {
   it('returns all items when no category is provided', async () => {
     pool.query.mockResolvedValue(makeRows([
       { id: 1, category: 'main-course', name: 'Risotto', price: '24.00' },
@@ -56,5 +56,61 @@ describe('GET /api/menu', () => {
     const res = await request(app).get('/api/menu');
     expect(res.status).toBe(500);
     expect(res.body.error).toBe('Internal server error');
+  });
+});
+
+describe('POST /api/menu', () => {
+  it('creates a new menu item', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([{ id: 10, category: 'dessert', name: 'Cake', price: 5.0 }]));
+    const res = await request(app).post('/api/menu').send({ category: 'Dessert', name: 'Cake', price: 5.0 });
+    expect(res.status).toBe(201);
+    expect(res.body.name).toBe('Cake');
+    expect(pool.query.mock.calls[0][1][0]).toBe('dessert');
+  });
+
+  it('returns 400 if missing required fields', async () => {
+    const res = await request(app).post('/api/menu').send({ name: 'Cake' });
+    expect(res.status).toBe(400);
+  });
+
+  it('returns 500 on database error', async () => {
+    pool.query.mockRejectedValueOnce(new Error('DB failure'));
+    const res = await request(app).post('/api/menu').send({ category: 'Dessert', name: 'Cake', price: 5.0 });
+    expect(res.status).toBe(500);
+  });
+});
+
+describe('PUT /api/menu/:id', () => {
+  it('updates an existing menu item', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([{ id: 10, category: 'dessert', name: 'Cake', price: 6.0 }]));
+    const res = await request(app).put('/api/menu/10').send({ category: 'dessert', name: 'Cake', price: 6.0 });
+    expect(res.status).toBe(200);
+    expect(res.body.price).toBe(6.0);
+  });
+
+  it('returns 404 if item not found', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([]));
+    const res = await request(app).put('/api/menu/999').send({ category: 'dessert', name: 'Cake', price: 6.0 });
+    expect(res.status).toBe(404);
+  });
+
+  it('returns 400 if missing required fields', async () => {
+    const res = await request(app).put('/api/menu/10').send({ name: 'Cake' });
+    expect(res.status).toBe(400);
+  });
+});
+
+describe('DELETE /api/menu/:id', () => {
+  it('deactivates an existing menu item', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([{ id: 10, is_available: false }]));
+    const res = await request(app).delete('/api/menu/10');
+    expect(res.status).toBe(200);
+    expect(res.body.item.is_available).toBe(false);
+  });
+
+  it('returns 404 if item not found', async () => {
+    pool.query.mockResolvedValueOnce(makeRows([]));
+    const res = await request(app).delete('/api/menu/999');
+    expect(res.status).toBe(404);
   });
 });

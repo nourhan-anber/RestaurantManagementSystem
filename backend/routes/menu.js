@@ -40,4 +40,81 @@ router.get('/', async (req, res) => {
   }
 });
 
+// POST /api/menu — create a new menu item
+router.post('/', async (req, res) => {
+  try {
+    const { category, name, description, price, image_url, is_available } = req.body;
+    
+    if (!category || !name || price === undefined) {
+      return res.status(400).json({ error: 'Category, name, and price are required' });
+    }
+
+    const result = await pool.query(
+      `INSERT INTO menu_items (category, name, description, price, image_url, is_available)
+       VALUES ($1, $2, $3, $4, $5, $6)
+       RETURNING *`,
+      [category.toLowerCase().replace(/\s+/g, '-'), name, description, price, image_url, is_available ?? true]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error('Error creating menu item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// PUT /api/menu/:id — update an existing menu item
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { category, name, description, price, image_url, is_available } = req.body;
+
+    if (!category || !name || price === undefined) {
+      return res.status(400).json({ error: 'Category, name, and price are required' });
+    }
+
+    const result = await pool.query(
+      `UPDATE menu_items 
+       SET category = $1, name = $2, description = $3, price = $4, image_url = $5, is_available = $6
+       WHERE id = $7
+       RETURNING *`,
+      [category.toLowerCase().replace(/\s+/g, '-'), name, description, price, image_url, is_available ?? true, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Menu item not found' });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error('Error updating menu item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// DELETE /api/menu/:id — soft delete (set is_available to false) or hard delete
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // We try to hard delete first. If there are order_items attached, 
+    // it will fail due to RESTRICT constraint. In that case, we can fallback to soft-delete 
+    // or just let it fail and tell the user to make it unavailable.
+    // For safety in this app, we'll do a soft-delete by setting is_available = false.
+    const result = await pool.query(
+      `UPDATE menu_items SET is_available = FALSE WHERE id = $1 RETURNING *`,
+      [id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Menu item not found' });
+    }
+
+    res.json({ message: 'Menu item deactivated', item: result.rows[0] });
+  } catch (error) {
+    console.error('Error deleting menu item:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
 export default router;
