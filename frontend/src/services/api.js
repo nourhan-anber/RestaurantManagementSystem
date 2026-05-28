@@ -1,4 +1,4 @@
-const BASE_URL = 'http://localhost:5001/api';
+const BASE_URL = `${import.meta.env.VITE_BACKEND_URL}/api`;
 
 export const fetchMenuItems = async (category = 'all') => {
   const url = new URL(`${BASE_URL}/menu`);

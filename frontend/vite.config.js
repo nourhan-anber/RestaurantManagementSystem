@@ -13,5 +13,15 @@ export default defineConfig({
       reporter: ['text', 'json', 'html'],
       exclude: ['node_modules/', 'src/setupTests.js', 'src/main.jsx', 'eslint.config.js', 'tailwind.config.js', 'postcss.config.js', 'vite.config.js']
     }
-  }
+  },
+  server: {
+    proxy: {
+      '/api': {
+        target: process.env.VITE_BACKEND_URL,
+        changeOrigin: true,
+        secure: false,
+        rewrite: path => path.replace(/^\/api/, '/api'),
+      },
+    },
+  },
 })
