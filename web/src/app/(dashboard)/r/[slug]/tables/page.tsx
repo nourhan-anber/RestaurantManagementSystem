@@ -24,7 +24,7 @@ export default async function TablesPage({ params }: { params: Promise<{ slug: s
     capacity: t.capacity,
     status: t.status,
     isActive: t.isActive,
-    qrUrl: `${base}/r/${slug}/t/${t.number}?token=${generateTableToken(restaurant.id, t.id)}`,
+    qrUrl: `${base}/dine/${slug}/${t.number}?token=${generateTableToken(restaurant.id, t.id)}`,
   }));
 
   return <TableManager slug={slug} tables={rows} />;
