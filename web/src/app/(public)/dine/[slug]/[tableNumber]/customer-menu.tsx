@@ -290,7 +290,7 @@ export function CustomerMenu({
               <>
                 <div className="flex-1 space-y-4 overflow-y-auto px-5 py-4">
                   <div className="space-y-1.5">
-                    <Label htmlFor="guestName">Your name</Label>
+                    <Label htmlFor="guestName">Your name (optional)</Label>
                     <Input id="guestName" value={guestName} onChange={(e) => setGuestName(e.target.value)} placeholder="So we can call your order" />
                   </div>
                   <div className="space-y-1.5">
@@ -320,7 +320,7 @@ export function CustomerMenu({
                   <Button
                     className="w-full"
                     size="lg"
-                    disabled={!guestName.trim() || status === 'placing'}
+                    disabled={status === 'placing'}
                     onClick={placeOrder}
                   >
                     {status === 'placing' ? 'Placing…' : 'Place order'}
