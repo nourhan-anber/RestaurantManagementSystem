@@ -22,6 +22,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       id: o.id,
       status: o.status,
       notes: o.notes,
+      guestName: o.guestName,
       createdAt: o.createdAt.toISOString(),
       tableNumber: o.table.number,
       items: o.items.map((it) => ({
@@ -29,6 +30,7 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
         name: it.menuItem.name,
         quantity: it.quantity,
         notes: it.notes,
+        modifiers: it.modifiers.map((m) => m.optionName),
       })),
     })),
   });

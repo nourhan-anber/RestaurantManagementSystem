@@ -9,7 +9,13 @@ export function listKitchenOrders(db: PrismaClient, restaurantId: number) {
     orderBy: { createdAt: 'asc' },
     include: {
       table: { select: { number: true } },
-      items: { include: { menuItem: { select: { name: true } } }, orderBy: { id: 'asc' } },
+      items: {
+        orderBy: { id: 'asc' },
+        include: {
+          menuItem: { select: { name: true } },
+          modifiers: { select: { optionName: true }, orderBy: { id: 'asc' } },
+        },
+      },
     },
   });
 }

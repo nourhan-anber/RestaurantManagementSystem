@@ -20,6 +20,7 @@ export default async function KitchenPage({ params }: { params: Promise<{ slug: 
     id: o.id,
     status: o.status as KdsOrder['status'],
     notes: o.notes,
+    guestName: o.guestName,
     createdAt: o.createdAt.toISOString(),
     tableNumber: o.table.number,
     items: o.items.map((it) => ({
@@ -27,6 +28,7 @@ export default async function KitchenPage({ params }: { params: Promise<{ slug: 
       name: it.menuItem.name,
       quantity: it.quantity,
       notes: it.notes,
+      modifiers: it.modifiers.map((m) => m.optionName),
     })),
   }));
 

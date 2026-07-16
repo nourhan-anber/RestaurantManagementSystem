@@ -12,11 +12,13 @@ export interface KdsItem {
   name: string;
   quantity: number;
   notes: string | null;
+  modifiers: string[];
 }
 export interface KdsOrder {
   id: number;
   status: 'PENDING' | 'PREPARING' | 'READY';
   notes: string | null;
+  guestName: string | null;
   createdAt: string;
   tableNumber: number;
   items: KdsItem[];
@@ -91,14 +93,22 @@ export function KitchenBoard({ slug, initialOrders }: { slug: string; initialOrd
                 {list.map((o) => (
                   <div key={o.id} className="rounded-[var(--radius)] border border-border bg-surface p-4">
                     <div className="flex items-center justify-between">
-                      <span className="font-display text-lg text-foreground">Table {o.tableNumber}</span>
+                      <span className="font-display text-lg text-foreground">
+                        Table {o.tableNumber}
+                        {o.guestName ? <span className="ml-1.5 text-sm font-normal text-muted">· {o.guestName}</span> : null}
+                      </span>
                       <span className="text-xs text-muted">{timeAgo(o.createdAt)}</span>
                     </div>
-                    <ul className="mt-2 space-y-1 text-sm text-foreground">
+                    <ul className="mt-2 space-y-1.5 text-sm text-foreground">
                       {o.items.map((it) => (
                         <li key={it.id}>
-                          <span className="tabular-nums text-muted">{it.quantity}×</span> {it.name}
-                          {it.notes ? <span className="text-xs text-ember-600"> · {it.notes}</span> : null}
+                          <div>
+                            <span className="tabular-nums text-muted">{it.quantity}×</span> {it.name}
+                          </div>
+                          {it.modifiers.length > 0 ? (
+                            <div className="pl-5 text-xs text-muted">{it.modifiers.join(', ')}</div>
+                          ) : null}
+                          {it.notes ? <div className="pl-5 text-xs text-ember-600">“{it.notes}”</div> : null}
                         </li>
                       ))}
                     </ul>

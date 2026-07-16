@@ -55,6 +55,7 @@ export default async function FloorPage({ params }: { params: Promise<{ slug: st
                   {t.orders.map((o) => (
                     <li key={o.id} className="flex justify-between">
                       <span>
+                        {o.guestName ? <span className="text-foreground">{o.guestName} · </span> : null}
                         {o.items.length} item{o.items.length === 1 ? '' : 's'} ·{' '}
                         <span className="text-muted">{o.status.toLowerCase()}</span>
                       </span>
