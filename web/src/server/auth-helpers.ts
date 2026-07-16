@@ -25,7 +25,8 @@ export function toSessionMemberships(
   }));
 }
 
-/** Landing route after a successful login, chosen by platform role then membership role. */
+/** Landing route after a successful login, chosen by platform role then membership role.
+ *  Owner/manager land on the tenant overview; chef goes to the kitchen; server to the floor. */
 export function resolvePostLoginPath(user: {
   isPlatformAdmin: boolean;
   memberships: SessionMembership[];
@@ -35,6 +36,8 @@ export function resolvePostLoginPath(user: {
   const first = user.memberships[0];
   if (!first) return '/no-access';
 
-  const home = first.role === 'CHEF' ? 'kitchen' : first.role === 'SERVER' ? 'floor' : 'menu';
-  return `/r/${first.restaurantSlug}/${home}`;
+  const base = `/r/${first.restaurantSlug}`;
+  if (first.role === 'CHEF') return `${base}/kitchen`;
+  if (first.role === 'SERVER') return `${base}/floor`;
+  return base; // OWNER / MANAGER → overview
 }

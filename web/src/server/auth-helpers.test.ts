@@ -47,16 +47,16 @@ describe('resolvePostLoginPath', () => {
   });
 
   it.each([
-    ['OWNER', 'menu'],
-    ['MANAGER', 'menu'],
-    ['CHEF', 'kitchen'],
-    ['SERVER', 'floor'],
-  ] as const)('routes %s to the %s section', (role, section) => {
+    ['OWNER', '/r/bella-vista'],
+    ['MANAGER', '/r/bella-vista'],
+    ['CHEF', '/r/bella-vista/kitchen'],
+    ['SERVER', '/r/bella-vista/floor'],
+  ] as const)('routes %s to %s', (role, path) => {
     expect(
       resolvePostLoginPath({
         isPlatformAdmin: false,
         memberships: [{ restaurantId: 1, restaurantSlug: 'bella-vista', role }],
       }),
-    ).toBe(`/r/bella-vista/${section}`);
+    ).toBe(path);
   });
 });
