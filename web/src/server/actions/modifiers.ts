@@ -18,7 +18,11 @@ export interface ModifierActionState {
   ok?: boolean;
 }
 
-const revalidate = (slug: string) => revalidatePath(`/r/${slug}/menu`);
+// The modifier editor lives on the item page; also refresh the menu list.
+const revalidate = (slug: string) => {
+  revalidatePath(`/r/${slug}/menu`);
+  revalidatePath(`/r/${slug}/menu/[itemId]`, 'page');
+};
 
 /** Empty max field -> null (unlimited); otherwise a number. */
 function maxSelectFromForm(value: FormDataEntryValue | null): number | null {

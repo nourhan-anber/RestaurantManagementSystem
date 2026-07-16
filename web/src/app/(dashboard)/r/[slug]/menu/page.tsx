@@ -4,7 +4,6 @@ import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { listMenu } from '@/server/services/menu';
 import { listCategories } from '@/server/services/categories';
-import { isUploadConfigured } from '@/server/storage';
 import { CategoryManager } from './category-manager';
 import { MenuManager } from './menu-manager';
 
@@ -57,7 +56,7 @@ export default async function MenuPage({ params }: { params: Promise<{ slug: str
   return (
     <div className="grid gap-8 lg:grid-cols-[1fr] xl:grid-cols-[20rem_1fr]">
       <div className="xl:order-2">
-        <MenuManager slug={slug} items={rows} categories={cats} uploadConfigured={isUploadConfigured()} />
+        <MenuManager slug={slug} items={rows} categories={cats} />
       </div>
       <div className="xl:order-1">
         <CategoryManager slug={slug} categories={cats} />

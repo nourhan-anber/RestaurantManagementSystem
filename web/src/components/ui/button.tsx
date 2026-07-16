@@ -21,19 +21,26 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   size?: ButtonSize;
 }
 
-export function Button({ className, variant = 'primary', size = 'md', type = 'button', ...props }: ButtonProps) {
-  return (
-    <button
-      type={type}
-      className={cn(
-        'inline-flex items-center justify-center gap-2 rounded-[var(--radius)] font-medium',
-        'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember/60',
-        'disabled:pointer-events-none disabled:opacity-60',
-        VARIANTS[variant],
-        SIZES[size],
-        className,
-      )}
-      {...props}
-    />
+/** The button's classes, for styling a non-button element (e.g. a Link) the same way. */
+export function buttonClasses({
+  variant = 'primary',
+  size = 'md',
+  className,
+}: {
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+} = {}) {
+  return cn(
+    'inline-flex items-center justify-center gap-2 rounded-[var(--radius)] font-medium',
+    'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember/60',
+    'disabled:pointer-events-none disabled:opacity-60',
+    VARIANTS[variant],
+    SIZES[size],
+    className,
   );
+}
+
+export function Button({ className, variant = 'primary', size = 'md', type = 'button', ...props }: ButtonProps) {
+  return <button type={type} className={buttonClasses({ variant, size, className })} {...props} />;
 }
