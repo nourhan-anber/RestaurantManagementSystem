@@ -36,7 +36,7 @@ export async function dispatchDelivery(
 ): Promise<DispatchResult> {
   const order = await db.order.findUnique({
     where: { id: orderId },
-    include: { restaurant: { select: { address: true } } },
+    include: { restaurant: { select: { name: true, address: true, phone: true } } },
   });
   if (!order) return { ok: false, reason: 'not_found' };
   if (order.orderType !== 'DELIVERY' || !order.deliveryAddress) {
@@ -53,6 +53,8 @@ export async function dispatchDelivery(
     dropoff: order.deliveryAddress,
     customerName: order.customerName ?? order.guestName ?? 'Customer',
     customerPhone: order.customerPhone ?? '',
+    pickupName: order.restaurant.name,
+    pickupPhone: order.restaurant.phone ?? '',
     quoteId: quote.quoteId,
   });
 
