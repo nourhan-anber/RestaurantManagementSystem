@@ -1,7 +1,9 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
+import { buttonClasses } from '@/components/ui/button';
 import { listMenu } from '@/server/services/menu';
 import { listCategories } from '@/server/services/categories';
 import { CategoryManager } from './category-manager';
@@ -54,12 +56,26 @@ export default async function MenuPage({ params }: { params: Promise<{ slug: str
   }));
 
   return (
-    <div className="grid gap-8 lg:grid-cols-[1fr] xl:grid-cols-[20rem_1fr]">
-      <div className="xl:order-2">
-        <MenuManager slug={slug} items={rows} categories={cats} />
+    <div>
+      <Link href={`/r/${slug}`} className="text-sm text-muted hover:text-foreground">
+        ← Overview
+      </Link>
+      <div className="mt-2 flex items-center justify-between gap-4">
+        <h1 className="font-display text-2xl tracking-tight text-foreground">Menu</h1>
+        {cats.length > 0 ? (
+          <Link href={`/r/${slug}/menu/new`} className={buttonClasses({ size: 'sm' })}>
+            Add item
+          </Link>
+        ) : null}
       </div>
-      <div className="xl:order-1">
-        <CategoryManager slug={slug} categories={cats} />
+
+      <div className="mt-6 grid items-start gap-6 lg:grid-cols-[18rem_1fr]">
+        <div className="order-2 lg:order-1">
+          <CategoryManager slug={slug} categories={cats} />
+        </div>
+        <div className="order-1 lg:order-2">
+          <MenuManager slug={slug} items={rows} categories={cats} />
+        </div>
       </div>
     </div>
   );
