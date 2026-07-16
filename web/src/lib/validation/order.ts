@@ -45,6 +45,7 @@ export const placeOnlineOrderSchema = z
     deliveryNotes: z.string().max(300).optional(),
     requestedTime: z.coerce.date().optional(),
     quoteId: z.string().max(200).optional(),
+    payOnline: z.boolean().optional(),
     items: z.array(orderLineSchema).min(1, 'Add at least one item.'),
   })
   .refine((v) => v.orderType !== 'DELIVERY' || Boolean(v.deliveryAddress), {

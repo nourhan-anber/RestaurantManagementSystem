@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import { getStripe } from '@/server/stripe';
 import { applySubscription } from '@/server/services/billing';
+import { recordOnlinePayment } from '@/server/services/payments';
 import { mapStripeStatus } from '@/lib/subscription';
 
 interface StripeSubscriptionLike {
@@ -28,6 +29,25 @@ export async function POST(req: Request) {
     event = stripe.webhooks.constructEvent(payload, signature, webhookSecret);
   } catch {
     return NextResponse.json({ error: 'invalid signature' }, { status: 400 });
+  }
+
+  // Storefront online order paid via Checkout — record the payment + dispatch.
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object as import('stripe').Stripe.Checkout.Session;
+    const orderId = Number(session.metadata?.orderId ?? 0);
+    if (session.metadata?.kind === 'order' && orderId && session.payment_status === 'paid') {
+      const paymentIntentId =
+        typeof session.payment_intent === 'string'
+          ? session.payment_intent
+          : (session.payment_intent?.id ?? session.id);
+      await recordOnlinePayment(db, {
+        orderId,
+        stripePaymentIntentId: paymentIntentId,
+        amountCents: session.amount_total ?? 0,
+        currency: session.currency ?? 'usd',
+      });
+    }
+    return NextResponse.json({ received: true });
   }
 
   if (event.type.startsWith('customer.subscription.')) {

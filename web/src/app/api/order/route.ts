@@ -2,9 +2,12 @@ import { NextResponse } from 'next/server';
 import { db } from '@/server/db';
 import { placeOnlineOrder, type Fulfillment } from '@/server/services/orders';
 import { getOpeningHours } from '@/server/services/restaurants';
-import { dispatchDelivery } from '@/server/services/deliveries';
+import { dispatchDelivery, quoteDelivery } from '@/server/services/deliveries';
+import { createOrderCheckout } from '@/server/checkout';
+import { isOnlinePaymentConfigured } from '@/server/stripe';
 import { placeOnlineOrderSchema } from '@/lib/validation/order';
 import { isOpenNow } from '@/lib/hours';
+import { toCents } from '@/lib/format';
 
 // Public storefront order placement (pickup or delivery). No table, no HMAC token —
 // gated instead by the restaurant enabling online ordering and being open. Prices
@@ -55,7 +58,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: result.reason }, { status: 400 });
   }
 
-  // Dispatch a courier for delivery orders (mock provider when Uber isn't configured).
+  // Online payment (Stripe): create a Checkout Session and hand back its URL. The
+  // courier is dispatched only after payment confirms (in the Stripe webhook), so
+  // we never pay for delivery on an unpaid order.
+  if (input.payOnline && isOnlinePaymentConfigured()) {
+    let deliveryFeeCents = 0;
+    if (input.orderType === 'DELIVERY') {
+      const quote = await quoteDelivery(db, input.slug, input.deliveryAddress!);
+      if (quote.ok) deliveryFeeCents = toCents(quote.quote.fee);
+    }
+    const checkout = await createOrderCheckout({
+      slug: input.slug,
+      orderId: result.orderId,
+      restaurantId: restaurant.id,
+      restaurantName: restaurant.name,
+      subtotalCents: toCents(result.total),
+      deliveryFeeCents,
+    });
+    if (checkout) {
+      return NextResponse.json(
+        { ok: true, orderId: result.orderId, total: result.total, checkoutUrl: checkout.url },
+        { status: 201 },
+      );
+    }
+    // Fall through to pay-on-arrival if the session couldn't be created.
+  }
+
+  // Pay-on-arrival: dispatch a courier now for delivery orders (mock provider when
+  // Uber isn't configured).
   let tracking: string | null = null;
   if (input.orderType === 'DELIVERY') {
     const dispatched = await dispatchDelivery(db, result.orderId);

@@ -6,8 +6,15 @@ import { isOpenNow, type DayHours } from '@/lib/hours';
 import type { CustomerMenuItem } from '../../dine/[slug]/[tableNumber]/customer-menu';
 import { StorefrontMenu } from './storefront-menu';
 
-export default async function OrderPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function OrderPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ paid?: string }>;
+}) {
   const { slug } = await params;
+  const { paid } = await searchParams;
 
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant || !restaurant.onlineOrderingEnabled) notFound();
@@ -74,6 +81,7 @@ export default async function OrderPage({ params }: { params: Promise<{ slug: st
       hours={hours}
       canDeliver={Boolean(restaurant.address)}
       onlinePayment={isOnlinePaymentConfigured()}
+      paid={paid === '1'}
       menu={menu}
     />
   );

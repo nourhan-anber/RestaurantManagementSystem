@@ -32,6 +32,7 @@ export default defineConfig({
         'src/server/auth.ts',
         'src/server/tenant.ts',
         'src/server/stripe.ts',
+        'src/server/checkout.ts',
         'src/server/storage.ts',
         'src/server/delivery.ts',
         'src/server/actions/**',

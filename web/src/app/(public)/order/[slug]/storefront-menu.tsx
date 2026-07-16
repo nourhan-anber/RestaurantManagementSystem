@@ -33,6 +33,7 @@ export function StorefrontMenu({
   hours,
   canDeliver,
   onlinePayment,
+  paid,
   menu,
 }: {
   slug: string;
@@ -45,6 +46,7 @@ export function StorefrontMenu({
   hours: DayHours[];
   canDeliver: boolean;
   onlinePayment: boolean;
+  paid: boolean;
   menu: CustomerMenuItem[];
 }) {
   const lines = useCart((s) => s.lines);
@@ -57,7 +59,7 @@ export function StorefrontMenu({
   const [cartOpen, setCartOpen] = useState(false);
   const [hoursOpen, setHoursOpen] = useState(false);
   const [step, setStep] = useState<Step>('menu');
-  const [status, setStatus] = useState<Status>('idle');
+  const [status, setStatus] = useState<Status>(paid ? 'success' : 'idle');
   const [customizing, setCustomizing] = useState<CustomerMenuItem | null>(null);
 
   const [orderType, setOrderType] = useState<OrderType>('PICKUP');
@@ -147,6 +149,7 @@ export function StorefrontMenu({
           notes: orderNote.trim() || undefined,
           deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress.trim() : undefined,
           deliveryNotes: orderType === 'DELIVERY' ? deliveryNotes.trim() || undefined : undefined,
+          payOnline: onlinePayment,
           items: lines.map((l) => ({
             menuItemId: l.menuItemId,
             quantity: l.quantity,
@@ -157,6 +160,12 @@ export function StorefrontMenu({
       });
       if (!res.ok) throw new Error('failed');
       const data = await res.json();
+      // Online payment: hand off to Stripe Checkout (we return via ?paid=1).
+      if (data.checkoutUrl) {
+        clear();
+        window.location.href = data.checkoutUrl;
+        return;
+      }
       setTrackingUrl(data.trackingUrl ?? null);
       clear();
       setStatus('success');

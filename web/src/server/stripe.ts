@@ -16,9 +16,10 @@ export function isBillingConfigured(): boolean {
 }
 
 /**
- * Storefront online order payments are available. Wired to real Stripe PaymentIntents
- * in P3; false for now so the storefront defaults to pay-on-arrival.
+ * Storefront online order payments are available. Requires a secret key (to create
+ * the Checkout Session) and a webhook secret (to confirm payment + record it).
+ * When false the storefront falls back to pay-on-arrival — no code path changes.
  */
 export function isOnlinePaymentConfigured(): boolean {
-  return false;
+  return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_WEBHOOK_SECRET);
 }
