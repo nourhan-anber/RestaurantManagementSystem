@@ -13,15 +13,18 @@ const db = new PrismaClient({ adapter });
 
 async function reset() {
   await db.$executeRawUnsafe(
-    'TRUNCATE order_items, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, restaurants, users RESTART IDENTITY CASCADE',
+    'TRUNCATE order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, restaurants, users RESTART IDENTITY CASCADE',
   );
 }
 
 async function fixture() {
   const r = await db.restaurant.create({ data: { name: 'Bella', slug: 'bella' } });
   const table = await db.table.create({ data: { restaurantId: r.id, number: 1 } });
+  const category = await db.menuCategory.create({
+    data: { restaurantId: r.id, name: 'main', position: 0 },
+  });
   const item = await db.menuItem.create({
-    data: { restaurantId: r.id, category: 'main', name: 'Dish', price: '10.00' },
+    data: { restaurantId: r.id, categoryId: category.id, name: 'Dish', price: '10.00' },
   });
   return { r, table, item };
 }

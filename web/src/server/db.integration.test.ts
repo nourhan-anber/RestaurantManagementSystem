@@ -18,8 +18,11 @@ async function makeFixture() {
   const table = await db.table.create({
     data: { restaurantId: restaurant.id, number: 1 },
   });
+  const category = await db.menuCategory.create({
+    data: { restaurantId: restaurant.id, name: 'main-course', position: 0 },
+  });
   const item = await db.menuItem.create({
-    data: { restaurantId: restaurant.id, category: 'main-course', name: 'Dish', price: '10.00' },
+    data: { restaurantId: restaurant.id, categoryId: category.id, name: 'Dish', price: '10.00' },
   });
   return { restaurant, table, item };
 }

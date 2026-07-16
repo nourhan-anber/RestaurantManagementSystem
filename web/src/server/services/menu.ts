@@ -4,7 +4,8 @@ import type { MenuItemInput } from '@/lib/validation/menu';
 export function listMenu(db: PrismaClient, restaurantId: number) {
   return db.menuItem.findMany({
     where: { restaurantId },
-    orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    orderBy: [{ category: { position: 'asc' } }, { name: 'asc' }],
+    include: { category: { select: { id: true, name: true, position: true } } },
   });
 }
 

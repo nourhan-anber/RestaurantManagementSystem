@@ -9,7 +9,7 @@ const db = new PrismaClient({ adapter });
 
 async function reset() {
   await db.$executeRawUnsafe(
-    'TRUNCATE order_items, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, restaurants, users RESTART IDENTITY CASCADE',
+    'TRUNCATE order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, restaurants, users RESTART IDENTITY CASCADE',
   );
 }
 
@@ -22,8 +22,9 @@ describe('reports', () => {
   it('summarizes only delivered orders and ranks top items', async () => {
     const r = await db.restaurant.create({ data: { name: 'Bella', slug: 'bella' } });
     const table = await db.table.create({ data: { restaurantId: r.id, number: 1 } });
-    const burger = await db.menuItem.create({ data: { restaurantId: r.id, category: 'main', name: 'Burger', price: '10.00' } });
-    const fries = await db.menuItem.create({ data: { restaurantId: r.id, category: 'side', name: 'Fries', price: '5.00' } });
+    const cat = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'main', position: 0 } });
+    const burger = await db.menuItem.create({ data: { restaurantId: r.id, categoryId: cat.id, name: 'Burger', price: '10.00' } });
+    const fries = await db.menuItem.create({ data: { restaurantId: r.id, categoryId: cat.id, name: 'Fries', price: '5.00' } });
 
     // Delivered order: 2 burgers + 3 fries = 20 + 15 = 35
     const o1 = await placeOrder(db, r.id, table.id, [

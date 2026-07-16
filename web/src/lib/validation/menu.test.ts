@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { menuItemInputSchema } from './menu';
 
-const valid = { name: 'Risotto', category: 'main-course', price: 24, isAvailable: true };
+const valid = { name: 'Risotto', categoryId: 1, price: 24, isAvailable: true };
 
 describe('menuItemInputSchema', () => {
   it('accepts a valid item and coerces a string price', () => {
@@ -20,6 +20,10 @@ describe('menuItemInputSchema', () => {
 
   it('rejects an invalid image URL', () => {
     expect(menuItemInputSchema.safeParse({ ...valid, imageUrl: 'not-a-url' }).success).toBe(false);
+  });
+
+  it('rejects a missing or non-positive category', () => {
+    expect(menuItemInputSchema.safeParse({ ...valid, categoryId: 0 }).success).toBe(false);
   });
 
   it('allows optional description and imageUrl to be omitted', () => {

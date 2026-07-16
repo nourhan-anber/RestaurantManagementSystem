@@ -2,7 +2,7 @@ import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client';
-import { Role } from '../src/generated/prisma/enums';
+import { DietaryTag, Role } from '../src/generated/prisma/enums';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const db = new PrismaClient({ adapter });
@@ -20,24 +20,122 @@ const TABLES: Array<{ number: number; capacity: number }> = [
   { number: 10, capacity: 4 }, { number: 11, capacity: 6 }, { number: 12, capacity: 4 },
 ];
 
-const MENU: Array<{ category: string; name: string; description: string; price: string }> = [
-  { category: 'main-course', name: 'Truffle Mushroom Risotto', description: 'Creamy Arborio rice with wild mushrooms, white truffle oil, and aged Parmesan.', price: '24.00' },
-  { category: 'main-course', name: 'Pan-Seared Sea Bass', description: 'Fresh sea bass fillet served with asparagus, roasted cherry tomatoes, and lemon butter sauce.', price: '32.00' },
-  { category: 'main-course', name: 'Wagyu Beef Burger', description: 'Premium Wagyu beef patty, caramelized onions, gruyere cheese, and truffle mayo on a brioche bun.', price: '28.00' },
-  { category: 'main-course', name: 'Classic Margherita Pizza', description: 'San Marzano tomato sauce, fresh mozzarella, basil leaves, and extra virgin olive oil.', price: '18.00' },
-  { category: 'appetizers', name: 'Truffle Fries', description: 'Crispy french fries tossed with truffle oil and freshly grated Parmesan.', price: '9.00' },
-  { category: 'appetizers', name: 'Burrata Caprese', description: 'Creamy burrata with heirloom tomatoes, fresh basil, and aged balsamic glaze.', price: '14.00' },
-  { category: 'appetizers', name: 'Crispy Calamari', description: 'Lightly breaded calamari rings served with marinara and lemon aioli.', price: '13.00' },
-  { category: 'desserts', name: 'Chocolate Lava Cake', description: 'Warm chocolate cake with a gooey molten center, served with vanilla bean ice cream.', price: '12.00' },
-  { category: 'desserts', name: 'Tiramisu', description: 'Classic Italian dessert with espresso-soaked ladyfingers and mascarpone cream.', price: '11.00' },
-  { category: 'desserts', name: 'Crème Brûlée', description: 'Silky vanilla custard topped with a perfectly caramelized sugar crust.', price: '10.00' },
-  { category: 'drinks', name: 'Signature Lemonade', description: 'Freshly squeezed lemons with a hint of mint and agave nectar.', price: '5.00' },
-  { category: 'drinks', name: 'Sparkling Water', description: 'Premium Italian sparkling mineral water, 750ml.', price: '4.00' },
-  { category: 'drinks', name: 'Espresso Martini', description: 'Vodka, fresh espresso, coffee liqueur, and a touch of vanilla syrup.', price: '14.00' },
+// Category display order (position = index).
+const CATEGORIES = ['main-course', 'appetizers', 'desserts', 'drinks'];
+
+interface SeedGroup {
+  name: string;
+  minSelect: number;
+  maxSelect: number | null;
+  options: Array<{ name: string; priceDelta: string }>;
+}
+interface SeedMenuItem {
+  category: string;
+  name: string;
+  description: string;
+  price: string;
+  dietaryTags?: DietaryTag[];
+  spiceLevel?: number;
+  modifierGroups?: SeedGroup[];
+}
+
+const MENU: SeedMenuItem[] = [
+  {
+    category: 'main-course', name: 'Truffle Mushroom Risotto',
+    description: 'Creamy Arborio rice with wild mushrooms, white truffle oil, and aged Parmesan.',
+    price: '24.00', dietaryTags: [DietaryTag.VEGETARIAN, DietaryTag.GLUTEN_FREE],
+  },
+  {
+    category: 'main-course', name: 'Pan-Seared Sea Bass',
+    description: 'Fresh sea bass fillet served with asparagus, roasted cherry tomatoes, and lemon butter sauce.',
+    price: '32.00', dietaryTags: [DietaryTag.GLUTEN_FREE],
+  },
+  {
+    category: 'main-course', name: 'Wagyu Beef Burger',
+    description: 'Premium Wagyu beef patty, caramelized onions, gruyere cheese, and truffle mayo on a brioche bun.',
+    price: '28.00',
+    modifierGroups: [
+      {
+        name: 'Cook', minSelect: 1, maxSelect: 1,
+        options: [
+          { name: 'Medium-rare', priceDelta: '0' },
+          { name: 'Medium', priceDelta: '0' },
+          { name: 'Well done', priceDelta: '0' },
+        ],
+      },
+      {
+        name: 'Add-ons', minSelect: 0, maxSelect: null,
+        options: [
+          { name: 'Extra cheese', priceDelta: '2.00' },
+          { name: 'Bacon', priceDelta: '3.00' },
+          { name: 'Fried egg', priceDelta: '2.50' },
+        ],
+      },
+    ],
+  },
+  {
+    category: 'main-course', name: 'Classic Margherita Pizza',
+    description: 'San Marzano tomato sauce, fresh mozzarella, basil leaves, and extra virgin olive oil.',
+    price: '18.00', dietaryTags: [DietaryTag.VEGETARIAN],
+    modifierGroups: [
+      {
+        name: 'Size', minSelect: 1, maxSelect: 1,
+        options: [
+          { name: 'Personal', priceDelta: '0' },
+          { name: 'Regular', priceDelta: '4.00' },
+          { name: 'Large', priceDelta: '8.00' },
+        ],
+      },
+    ],
+  },
+  {
+    category: 'appetizers', name: 'Truffle Fries',
+    description: 'Crispy french fries tossed with truffle oil and freshly grated Parmesan.',
+    price: '9.00', dietaryTags: [DietaryTag.VEGETARIAN],
+  },
+  {
+    category: 'appetizers', name: 'Burrata Caprese',
+    description: 'Creamy burrata with heirloom tomatoes, fresh basil, and aged balsamic glaze.',
+    price: '14.00', dietaryTags: [DietaryTag.VEGETARIAN, DietaryTag.GLUTEN_FREE],
+  },
+  {
+    category: 'appetizers', name: 'Crispy Calamari',
+    description: 'Lightly breaded calamari rings served with marinara and lemon aioli.',
+    price: '13.00', spiceLevel: 1,
+  },
+  {
+    category: 'desserts', name: 'Chocolate Lava Cake',
+    description: 'Warm chocolate cake with a gooey molten center, served with vanilla bean ice cream.',
+    price: '12.00', dietaryTags: [DietaryTag.VEGETARIAN],
+  },
+  {
+    category: 'desserts', name: 'Tiramisu',
+    description: 'Classic Italian dessert with espresso-soaked ladyfingers and mascarpone cream.',
+    price: '11.00', dietaryTags: [DietaryTag.VEGETARIAN],
+  },
+  {
+    category: 'desserts', name: 'Crème Brûlée',
+    description: 'Silky vanilla custard topped with a perfectly caramelized sugar crust.',
+    price: '10.00', dietaryTags: [DietaryTag.VEGETARIAN, DietaryTag.GLUTEN_FREE],
+  },
+  {
+    category: 'drinks', name: 'Signature Lemonade',
+    description: 'Freshly squeezed lemons with a hint of mint and agave nectar.',
+    price: '5.00', dietaryTags: [DietaryTag.VEGAN, DietaryTag.GLUTEN_FREE],
+  },
+  {
+    category: 'drinks', name: 'Sparkling Water',
+    description: 'Premium Italian sparkling mineral water, 750ml.',
+    price: '4.00', dietaryTags: [DietaryTag.VEGAN, DietaryTag.GLUTEN_FREE],
+  },
+  {
+    category: 'drinks', name: 'Espresso Martini',
+    description: 'Vodka, fresh espresso, coffee liqueur, and a touch of vanilla syrup.',
+    price: '14.00', dietaryTags: [DietaryTag.GLUTEN_FREE],
+  },
 ];
 
 async function main() {
-  // Platform admin (cross-tenant, no membership).
   await db.user.upsert({
     where: { email: ADMIN_EMAIL },
     update: { isPlatformAdmin: true },
@@ -49,14 +147,12 @@ async function main() {
     },
   });
 
-  // Seed tenant.
   const restaurant = await db.restaurant.upsert({
     where: { slug: 'bella-vista' },
     update: {},
     create: { name: 'Bella Vista', slug: 'bella-vista' },
   });
 
-  // Owner of the seed tenant.
   const owner = await db.user.upsert({
     where: { email: OWNER_EMAIL },
     update: {},
@@ -72,7 +168,6 @@ async function main() {
     create: { userId: owner.id, restaurantId: restaurant.id, role: Role.OWNER },
   });
 
-  // Tables (idempotent on the [restaurantId, number] unique).
   for (const t of TABLES) {
     await db.table.upsert({
       where: { restaurantId_number: { restaurantId: restaurant.id, number: t.number } },
@@ -81,21 +176,60 @@ async function main() {
     });
   }
 
-  // Menu items (no unique on name -> find-or-update).
+  // Categories (idempotent on [restaurantId, name]); position = display order.
+  const categoryIdByName = new Map<string, number>();
+  for (let i = 0; i < CATEGORIES.length; i += 1) {
+    const cat = await db.menuCategory.upsert({
+      where: { restaurantId_name: { restaurantId: restaurant.id, name: CATEGORIES[i] } },
+      update: { position: i, isHidden: false },
+      create: { restaurantId: restaurant.id, name: CATEGORIES[i], position: i },
+    });
+    categoryIdByName.set(cat.name, cat.id);
+  }
+
+  // Menu items (no unique on name -> find-or-update) + modifier groups (clear & recreate).
+  let groupCount = 0;
   for (const item of MENU) {
+    const categoryId = categoryIdByName.get(item.category)!;
+    const data = {
+      categoryId,
+      name: item.name,
+      description: item.description,
+      price: item.price,
+      dietaryTags: item.dietaryTags ?? [],
+      spiceLevel: item.spiceLevel ?? 0,
+    };
     const existing = await db.menuItem.findFirst({
       where: { restaurantId: restaurant.id, name: item.name },
     });
-    if (existing) {
-      await db.menuItem.update({ where: { id: existing.id }, data: item });
-    } else {
-      await db.menuItem.create({ data: { ...item, restaurantId: restaurant.id } });
+    const saved = existing
+      ? await db.menuItem.update({ where: { id: existing.id }, data })
+      : await db.menuItem.create({ data: { ...data, restaurantId: restaurant.id } });
+
+    await db.modifierGroup.deleteMany({ where: { menuItemId: saved.id } });
+    if (item.modifierGroups) {
+      for (let gi = 0; gi < item.modifierGroups.length; gi += 1) {
+        const g = item.modifierGroups[gi];
+        await db.modifierGroup.create({
+          data: {
+            menuItemId: saved.id,
+            name: g.name,
+            minSelect: g.minSelect,
+            maxSelect: g.maxSelect,
+            position: gi,
+            options: {
+              create: g.options.map((o, oi) => ({ name: o.name, priceDelta: o.priceDelta, position: oi })),
+            },
+          },
+        });
+        groupCount += 1;
+      }
     }
   }
 
   console.log(
-    `Seeded: restaurant "${restaurant.name}" (${restaurant.slug}), ` +
-      `${TABLES.length} tables, ${MENU.length} menu items, platform admin + owner.`,
+    `Seeded: "${restaurant.name}" (${restaurant.slug}) — ${CATEGORIES.length} categories, ` +
+      `${TABLES.length} tables, ${MENU.length} menu items, ${groupCount} modifier groups, admin + owner.`,
   );
 }
 

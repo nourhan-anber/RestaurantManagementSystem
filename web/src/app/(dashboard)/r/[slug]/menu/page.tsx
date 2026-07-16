@@ -3,6 +3,8 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { listMenu } from '@/server/services/menu';
+import { listCategories } from '@/server/services/categories';
+import { CategoryManager } from './category-manager';
 import { MenuManager } from './menu-manager';
 
 export default async function MenuPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -15,16 +17,36 @@ export default async function MenuPage({ params }: { params: Promise<{ slug: str
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) notFound();
 
-  const items = await listMenu(db, restaurant.id);
+  const [items, categories] = await Promise.all([
+    listMenu(db, restaurant.id),
+    listCategories(db, restaurant.id),
+  ]);
+
   const rows = items.map((i) => ({
     id: i.id,
     name: i.name,
-    category: i.category,
+    categoryId: i.categoryId,
+    categoryName: i.category.name,
     description: i.description,
     price: Number(i.price),
     imageUrl: i.imageUrl,
     isAvailable: i.isAvailable,
   }));
+  const cats = categories.map((c) => ({
+    id: c.id,
+    name: c.name,
+    position: c.position,
+    isHidden: c.isHidden,
+  }));
 
-  return <MenuManager slug={slug} items={rows} />;
+  return (
+    <div className="grid gap-8 lg:grid-cols-[1fr] xl:grid-cols-[20rem_1fr]">
+      <div className="xl:order-2">
+        <MenuManager slug={slug} items={rows} categories={cats} />
+      </div>
+      <div className="xl:order-1">
+        <CategoryManager slug={slug} categories={cats} />
+      </div>
+    </div>
+  );
 }

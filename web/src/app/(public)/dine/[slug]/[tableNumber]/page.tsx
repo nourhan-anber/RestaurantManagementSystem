@@ -38,13 +38,14 @@ export default async function DinePage({
   }
 
   const items = await db.menuItem.findMany({
-    where: { restaurantId: restaurant.id, isAvailable: true },
-    orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    where: { restaurantId: restaurant.id, isAvailable: true, category: { isHidden: false } },
+    orderBy: [{ category: { position: 'asc' } }, { name: 'asc' }],
+    include: { category: { select: { name: true } } },
   });
   const menu: CustomerMenuItem[] = items.map((i) => ({
     id: i.id,
     name: i.name,
-    category: i.category,
+    category: i.category.name,
     description: i.description,
     price: Number(i.price),
   }));

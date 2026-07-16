@@ -4,7 +4,15 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/server/db';
 import { requireAbility } from '@/server/tenant';
 import { menuItemInputSchema } from '@/lib/validation/menu';
+import { categoryInputSchema } from '@/lib/validation/category';
 import { createMenuItem, deleteMenuItem, updateMenuItem } from '@/server/services/menu';
+import {
+  categoryBelongsTo,
+  createCategory,
+  deleteCategory,
+  moveCategory,
+  updateCategory,
+} from '@/server/services/categories';
 
 export interface MenuActionState {
   error?: string;
@@ -25,7 +33,7 @@ export async function saveMenuItem(
 
   const parsed = menuItemInputSchema.safeParse({
     name: formData.get('name'),
-    category: formData.get('category'),
+    categoryId: formData.get('categoryId'),
     description: optional(formData.get('description')),
     price: formData.get('price'),
     imageUrl: optional(formData.get('imageUrl')),
@@ -33,6 +41,11 @@ export async function saveMenuItem(
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+  }
+
+  // The category must belong to this restaurant (guards a crafted form).
+  if (!(await categoryBelongsTo(db, restaurantId, parsed.data.categoryId))) {
+    return { error: 'Choose a valid category.' };
   }
 
   const idRaw = formData.get('id');
@@ -59,4 +72,65 @@ export async function removeMenuItem(slug: string, id: number): Promise<void> {
     await db.menuItem.updateMany({ where: { id, restaurantId }, data: { isAvailable: false } });
   }
   revalidatePath(`/r/${slug}/menu`);
+}
+
+// ─────────────────────────── Categories ───────────────────────────
+
+export async function saveCategory(
+  slug: string,
+  _prev: MenuActionState,
+  formData: FormData,
+): Promise<MenuActionState> {
+  const { restaurantId } = await requireAbility(slug, 'menu:write');
+
+  const parsed = categoryInputSchema.safeParse({
+    name: formData.get('name'),
+    isHidden: formData.get('isHidden') === 'on',
+  });
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+  }
+
+  const idRaw = formData.get('id');
+  try {
+    if (idRaw) {
+      await updateCategory(db, restaurantId, Number(idRaw), parsed.data);
+    } else {
+      await createCategory(db, restaurantId, parsed.data);
+    }
+  } catch {
+    return { error: `A category named "${parsed.data.name}" already exists.` };
+  }
+
+  revalidatePath(`/r/${slug}/menu`);
+  return { ok: true };
+}
+
+export async function moveCategoryAction(
+  slug: string,
+  id: number,
+  direction: 'up' | 'down',
+): Promise<void> {
+  const { restaurantId } = await requireAbility(slug, 'menu:write');
+  await moveCategory(db, restaurantId, id, direction);
+  revalidatePath(`/r/${slug}/menu`);
+}
+
+export async function removeCategory(
+  slug: string,
+  _prev: MenuActionState,
+  formData: FormData,
+): Promise<MenuActionState> {
+  const { restaurantId } = await requireAbility(slug, 'menu:write');
+  const result = await deleteCategory(db, restaurantId, Number(formData.get('categoryId')));
+  revalidatePath(`/r/${slug}/menu`);
+  if (!result.ok) {
+    return {
+      error:
+        result.reason === 'has_items'
+          ? 'Move or delete this category’s items first.'
+          : 'Category not found.',
+    };
+  }
+  return { ok: true };
 }
