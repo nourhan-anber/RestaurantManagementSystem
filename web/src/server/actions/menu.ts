@@ -38,6 +38,8 @@ export async function saveMenuItem(
     price: formData.get('price'),
     imageUrl: optional(formData.get('imageUrl')),
     isAvailable: formData.get('isAvailable') === 'on',
+    dietaryTags: formData.getAll('dietaryTags'),
+    spiceLevel: formData.get('spiceLevel') ?? 0,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };

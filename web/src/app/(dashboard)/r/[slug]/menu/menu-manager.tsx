@@ -6,8 +6,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatMoney } from '@/lib/format';
+import { DIETARY_LABELS, DIETARY_TAGS, MAX_SPICE } from '@/lib/dietary';
 import { removeMenuItem, saveMenuItem, type MenuActionState } from '@/server/actions/menu';
+import type { DietaryTag } from '@/generated/prisma/enums';
 import { ModifierEditor, type GroupRow } from './modifier-editor';
+import { ImageUploadField } from './image-upload-field';
 
 export interface MenuRow {
   id: number;
@@ -18,6 +21,8 @@ export interface MenuRow {
   price: number;
   imageUrl: string | null;
   isAvailable: boolean;
+  dietaryTags: DietaryTag[];
+  spiceLevel: number;
   modifierGroups: GroupRow[];
 }
 
@@ -37,10 +42,12 @@ export function MenuManager({
   slug,
   items,
   categories,
+  uploadConfigured,
 }: {
   slug: string;
   items: MenuRow[];
   categories: CategoryOption[];
+  uploadConfigured: boolean;
 }) {
   const [editing, setEditing] = useState<MenuRow | null>(null);
   const [state, formAction, pending] = useActionState(saveMenuItem.bind(null, slug), INITIAL);
@@ -114,9 +121,36 @@ export function MenuManager({
             />
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="imageUrl">Image URL</Label>
-            <Input id="imageUrl" name="imageUrl" type="url" defaultValue={editing?.imageUrl ?? ''} placeholder="https://…" />
+            <Label>Photo</Label>
+            <ImageUploadField slug={slug} defaultUrl={editing?.imageUrl ?? ''} configured={uploadConfigured} />
           </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="spiceLevel">Spice level</Label>
+            <select id="spiceLevel" name="spiceLevel" defaultValue={editing?.spiceLevel ?? 0} className={selectClass}>
+              {['None', 'Mild', 'Medium', 'Hot'].slice(0, MAX_SPICE + 1).map((label, level) => (
+                <option key={label} value={level}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <fieldset className="space-y-1.5">
+            <legend className="text-sm font-medium text-foreground">Dietary</legend>
+            <div className="grid grid-cols-2 gap-1.5">
+              {DIETARY_TAGS.map((tag) => (
+                <label key={tag} className="flex items-center gap-2 text-xs text-foreground">
+                  <input
+                    type="checkbox"
+                    name="dietaryTags"
+                    value={tag}
+                    defaultChecked={editing?.dietaryTags.includes(tag) ?? false}
+                    className="size-3.5 accent-[var(--color-ember)]"
+                  />
+                  {DIETARY_LABELS[tag]}
+                </label>
+              ))}
+            </div>
+          </fieldset>
           <label className="flex items-center gap-2 text-sm text-foreground">
             <input type="checkbox" name="isAvailable" defaultChecked={editing ? editing.isAvailable : true} className="size-4 accent-[var(--color-ember)]" />
             Available

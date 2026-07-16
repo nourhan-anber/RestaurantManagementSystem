@@ -22,7 +22,7 @@ async function twoRestaurants() {
   return { r1, r2, cat1, cat2 };
 }
 
-const menuBase = { name: 'Dish', price: 10, isAvailable: true };
+const menuBase = { name: 'Dish', price: 10, isAvailable: true, dietaryTags: [], spiceLevel: 0 };
 const tableInput = { number: 1, capacity: 4, isActive: true };
 
 beforeEach(reset);

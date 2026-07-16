@@ -3,8 +3,10 @@
 import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { cartCount, cartTotal } from '@/lib/cart';
+import { DIETARY_LABELS } from '@/lib/dietary';
 import { formatMoney } from '@/lib/format';
 import { useCart } from '@/stores/cart';
+import type { DietaryTag } from '@/generated/prisma/enums';
 
 export interface CustomerMenuItem {
   id: number;
@@ -12,6 +14,9 @@ export interface CustomerMenuItem {
   category: string;
   description: string | null;
   price: number;
+  imageUrl: string | null;
+  dietaryTags: DietaryTag[];
+  spiceLevel: number;
 }
 
 type Status = 'idle' | 'placing' | 'success' | 'error';
@@ -120,6 +125,23 @@ export function CustomerMenu({
                     <p className="mt-0.5 text-sm text-muted">{item.description}</p>
                   ) : null}
                   <p className="mt-1 text-sm tabular-nums text-foreground">{formatMoney(item.price)}</p>
+                  {item.dietaryTags.length > 0 || item.spiceLevel > 0 ? (
+                    <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                      {item.dietaryTags.map((t) => (
+                        <span
+                          key={t}
+                          className="rounded-full bg-pine/10 px-2 py-0.5 text-[0.6rem] uppercase tracking-wide text-pine dark:bg-linen/10 dark:text-linen"
+                        >
+                          {DIETARY_LABELS[t]}
+                        </span>
+                      ))}
+                      {item.spiceLevel > 0 ? (
+                        <span className="text-xs" title={`Spice ${item.spiceLevel}/3`}>
+                          {'🌶️'.repeat(item.spiceLevel)}
+                        </span>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
                 {q === 0 ? (
                   <Button size="sm" onClick={() => add({ menuItemId: item.id, name: item.name, price: item.price })}>

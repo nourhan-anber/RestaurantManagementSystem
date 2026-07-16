@@ -27,6 +27,20 @@ describe('menuItemInputSchema', () => {
   });
 
   it('allows optional description and imageUrl to be omitted', () => {
-    expect(menuItemInputSchema.parse(valid).description).toBeUndefined();
+    const parsed = menuItemInputSchema.parse(valid);
+    expect(parsed.description).toBeUndefined();
+    expect(parsed.dietaryTags).toEqual([]);
+    expect(parsed.spiceLevel).toBe(0);
+  });
+
+  it('accepts dietary tags and coerces spice level', () => {
+    const parsed = menuItemInputSchema.parse({ ...valid, dietaryTags: ['VEGAN'], spiceLevel: '2' });
+    expect(parsed.dietaryTags).toEqual(['VEGAN']);
+    expect(parsed.spiceLevel).toBe(2);
+  });
+
+  it('rejects an out-of-range spice level or unknown tag', () => {
+    expect(menuItemInputSchema.safeParse({ ...valid, spiceLevel: 5 }).success).toBe(false);
+    expect(menuItemInputSchema.safeParse({ ...valid, dietaryTags: ['NOPE'] }).success).toBe(false);
   });
 });

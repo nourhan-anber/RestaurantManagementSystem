@@ -48,6 +48,9 @@ export default async function DinePage({
     category: i.category.name,
     description: i.description,
     price: Number(i.price),
+    imageUrl: i.imageUrl,
+    dietaryTags: i.dietaryTags,
+    spiceLevel: i.spiceLevel,
   }));
 
   return (
