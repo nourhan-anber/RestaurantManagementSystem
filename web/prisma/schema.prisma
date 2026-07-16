@@ -1,0 +1,275 @@
+// Restaurant Management System — Prisma schema
+// Ported from backend/db/schema.sql and extended with auth, membership, and billing.
+// NOTE: table-status side effects (occupy on order insert, reopen when the last
+// active order closes) are enforced by Postgres TRIGGERS installed via a custom
+// SQL migration — they are intentionally invisible to Prisma's types. See
+// prisma/migrations/*/migration.sql and docs. Never use `prisma db push` (it
+// would drop the triggers); always use `prisma migrate`.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─────────────────────────── Enums ───────────────────────────
+
+enum Role {
+  OWNER
+  MANAGER
+  CHEF
+  SERVER
+}
+
+enum TableStatus {
+  OPEN     @map("open")
+  OCCUPIED @map("occupied")
+  CLOSED   @map("closed")
+}
+
+enum OrderStatus {
+  PENDING   @map("pending")
+  CONFIRMED @map("confirmed")
+  PREPARING @map("preparing")
+  READY     @map("ready")
+  DELIVERED @map("delivered")
+  CANCELLED @map("cancelled")
+}
+
+enum SubscriptionStatus {
+  TRIALING @map("trialing")
+  ACTIVE   @map("active")
+  PAST_DUE @map("past_due")
+  CANCELED @map("canceled")
+  INACTIVE @map("inactive")
+}
+
+enum PaymentStatus {
+  PENDING   @map("pending")
+  SUCCEEDED @map("succeeded")
+  FAILED    @map("failed")
+  REFUNDED  @map("refunded")
+}
+
+// ─────────────────────── Tenant + domain ───────────────────────
+
+model Restaurant {
+  id        Int      @id @default(autoincrement())
+  name      String
+  slug      String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  menuItems    MenuItem[]
+  tables       Table[]
+  orders       Order[]
+  memberships  Membership[]
+  invites      StaffInvite[]
+  subscription Subscription?
+  payments     Payment[]
+
+  @@map("restaurants")
+}
+
+model MenuItem {
+  id           Int      @id @default(autoincrement())
+  restaurantId Int      @map("restaurant_id")
+  category     String
+  name         String
+  description  String?
+  price        Decimal  @db.Decimal(10, 2)
+  imageUrl     String?  @map("image_url")
+  isAvailable  Boolean  @default(true) @map("is_available")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderItems OrderItem[]
+
+  @@index([restaurantId, category])
+  @@map("menu_items")
+}
+
+model Table {
+  id           Int         @id @default(autoincrement())
+  restaurantId Int         @map("restaurant_id")
+  number       Int
+  capacity     Int         @default(4)
+  status       TableStatus @default(OPEN)
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders     Order[]
+
+  @@unique([restaurantId, number])
+  @@map("tables")
+}
+
+model Order {
+  id           Int         @id @default(autoincrement())
+  restaurantId Int         @map("restaurant_id")
+  tableId      Int         @map("table_id")
+  status       OrderStatus @default(PENDING)
+  notes        String?
+  total        Decimal     @default(0) @db.Decimal(10, 2)
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table      Table       @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  items      OrderItem[]
+  payments   Payment[]
+
+  @@index([restaurantId, status])
+  @@index([tableId])
+  @@map("orders")
+}
+
+model OrderItem {
+  id         Int      @id @default(autoincrement())
+  orderId    Int      @map("order_id")
+  menuItemId Int      @map("menu_item_id")
+  quantity   Int      @default(1)
+  unitPrice  Decimal  @map("unit_price") @db.Decimal(10, 2)
+  notes      String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  order    Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItem MenuItem @relation(fields: [menuItemId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ─────────────────────── Auth (Auth.js/NextAuth) ───────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime? @map("email_verified")
+  image         String?
+  passwordHash  String?   @map("password_hash")
+  isPlatformAdmin Boolean @default(false) @map("is_platform_admin")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  accounts    Account[]
+  sessions    Session[]
+  memberships Membership[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String  @map("user_id")
+  type              String
+  provider          String
+  providerAccountId String  @map("provider_account_id")
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique @map("session_token")
+  userId       String   @map("user_id")
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ─────────────────────── Membership + invites (RBAC) ───────────────────────
+
+model Membership {
+  id           String   @id @default(cuid())
+  userId       String   @map("user_id")
+  restaurantId Int      @map("restaurant_id")
+  role         Role
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, restaurantId])
+  @@index([restaurantId])
+  @@map("memberships")
+}
+
+model StaffInvite {
+  id           String    @id @default(cuid())
+  restaurantId Int       @map("restaurant_id")
+  email        String
+  role         Role
+  tokenHash    String    @unique @map("token_hash")
+  expiresAt    DateTime  @map("expires_at")
+  acceptedAt   DateTime? @map("accepted_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId])
+  @@map("staff_invites")
+}
+
+// ─────────────────────── Billing (Stripe) ───────────────────────
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  restaurantId         Int                @unique @map("restaurant_id")
+  stripeCustomerId     String?            @unique @map("stripe_customer_id")
+  stripeSubscriptionId String?            @unique @map("stripe_subscription_id")
+  status               SubscriptionStatus @default(INACTIVE)
+  priceId              String?            @map("price_id")
+  currentPeriodEnd     DateTime?          @map("current_period_end")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                    String        @id @default(cuid())
+  restaurantId          Int           @map("restaurant_id")
+  orderId               Int?          @map("order_id")
+  stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
+  amount                Decimal       @db.Decimal(10, 2)
+  currency              String        @default("usd")
+  status                PaymentStatus @default(PENDING)
+  createdAt             DateTime      @default(now()) @map("created_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  order      Order?     @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId])
+  @@index([orderId])
+  @@map("payments")
+}
