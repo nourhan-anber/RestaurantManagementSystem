@@ -26,7 +26,7 @@ export default async function NewMenuItemPage({ params }: { params: Promise<{ sl
   }));
 
   return (
-    <div className="max-w-xl">
+    <div className="mx-auto max-w-2xl">
       <Link href={`/r/${slug}/menu`} className="text-sm text-muted hover:text-foreground">
         ← Menu
       </Link>

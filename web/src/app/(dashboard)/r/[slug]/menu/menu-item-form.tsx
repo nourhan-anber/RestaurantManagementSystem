@@ -62,8 +62,12 @@ export function MenuItemForm({
   return (
     <form
       action={formAction}
-      className="max-w-xl space-y-4 rounded-[var(--radius)] border border-border bg-surface p-5"
+      className="space-y-4 rounded-[var(--radius)] border border-border bg-surface p-6"
     >
+      <div>
+        <h2 className="font-display text-lg text-foreground">Details</h2>
+        <p className="mt-1 text-xs text-muted">Name, price, photo, and dietary info.</p>
+      </div>
       {item ? <input type="hidden" name="id" value={item.id} /> : null}
 
       {!hasCategories ? (

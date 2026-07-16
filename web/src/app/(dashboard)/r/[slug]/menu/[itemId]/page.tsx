@@ -70,18 +70,17 @@ export default async function EditMenuItemPage({
   }));
 
   return (
-    <div className="max-w-xl space-y-6">
-      <div>
-        <Link href={`/r/${slug}/menu`} className="text-sm text-muted hover:text-foreground">
-          ← Menu
-        </Link>
-        <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground">Edit item</h1>
-        <p className="text-sm text-muted">{row.name}</p>
+    <div className="mx-auto max-w-2xl">
+      <Link href={`/r/${slug}/menu`} className="text-sm text-muted hover:text-foreground">
+        ← Menu
+      </Link>
+      <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground">Edit item</h1>
+      <p className="text-sm text-muted">{row.name}</p>
+
+      <div className="mt-6 space-y-6">
+        <MenuItemForm slug={slug} item={row} categories={cats} uploadConfigured={isUploadConfigured()} />
+        <ModifierEditor slug={slug} menuItemId={row.id} groups={row.modifierGroups} />
       </div>
-
-      <MenuItemForm slug={slug} item={row} categories={cats} uploadConfigured={isUploadConfigured()} />
-
-      <ModifierEditor slug={slug} menuItemId={row.id} groups={row.modifierGroups} />
     </div>
   );
 }
