@@ -31,6 +31,18 @@ export default async function MenuPage({ params }: { params: Promise<{ slug: str
     price: Number(i.price),
     imageUrl: i.imageUrl,
     isAvailable: i.isAvailable,
+    modifierGroups: i.modifierGroups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      minSelect: g.minSelect,
+      maxSelect: g.maxSelect,
+      options: g.options.map((o) => ({
+        id: o.id,
+        name: o.name,
+        priceDelta: Number(o.priceDelta),
+        isAvailable: o.isAvailable,
+      })),
+    })),
   }));
   const cats = categories.map((c) => ({
     id: c.id,

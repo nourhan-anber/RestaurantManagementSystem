@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatMoney } from '@/lib/format';
 import { removeMenuItem, saveMenuItem, type MenuActionState } from '@/server/actions/menu';
+import { ModifierEditor, type GroupRow } from './modifier-editor';
 
 export interface MenuRow {
   id: number;
@@ -17,6 +18,7 @@ export interface MenuRow {
   price: number;
   imageUrl: string | null;
   isAvailable: boolean;
+  modifierGroups: GroupRow[];
 }
 
 export interface CategoryOption {
@@ -59,7 +61,8 @@ export function MenuManager({
       <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground">Menu</h1>
 
       <div className="mt-6 grid gap-8 lg:grid-cols-[22rem_1fr]">
-        {/* Editor */}
+        {/* Editor + modifiers */}
+        <div className="space-y-6">
         <form
           key={editing?.id ?? 'new'}
           action={formAction}
@@ -132,6 +135,15 @@ export function MenuManager({
             ) : null}
           </div>
         </form>
+
+          {editing ? (
+            <ModifierEditor slug={slug} menuItemId={editing.id} groups={editing.modifierGroups} />
+          ) : (
+            <p className="rounded-[var(--radius)] border border-dashed border-border px-4 py-3 text-xs text-muted">
+              Save an item, then edit it to add options (sizes, add-ons…).
+            </p>
+          )}
+        </div>
 
         {/* List grouped by category (ordered by category position) */}
         <div className="space-y-6">

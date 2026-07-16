@@ -5,7 +5,13 @@ export function listMenu(db: PrismaClient, restaurantId: number) {
   return db.menuItem.findMany({
     where: { restaurantId },
     orderBy: [{ category: { position: 'asc' } }, { name: 'asc' }],
-    include: { category: { select: { id: true, name: true, position: true } } },
+    include: {
+      category: { select: { id: true, name: true, position: true } },
+      modifierGroups: {
+        orderBy: { position: 'asc' },
+        include: { options: { orderBy: { position: 'asc' } } },
+      },
+    },
   });
 }
 
