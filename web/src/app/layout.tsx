@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
+import { Providers } from "./providers";
 
 const fraunces = Fraunces({
   variable: "--font-fraunces",
@@ -31,7 +32,7 @@ export default function RootLayout({
       className={`${fraunces.variable} ${inter.variable} h-full antialiased`}
     >
       <body className="flex min-h-full flex-col bg-background font-sans text-foreground">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   );

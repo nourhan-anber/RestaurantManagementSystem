@@ -6,7 +6,7 @@ import { SectionCard } from '@/components/dashboard/section-card';
 
 // Sections whose routes exist. Grows as later phases land (menu/tables → P5,
 // kitchen/floor → P6, staff → P5, reports → P9, settings/billing → P8).
-const BUILT_SECTIONS = new Set<string>(['menu', 'tables', 'staff']);
+const BUILT_SECTIONS = new Set<string>(['menu', 'tables', 'staff', 'kitchen', 'floor']);
 
 export default async function TenantOverview({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
