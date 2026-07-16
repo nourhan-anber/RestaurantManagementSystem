@@ -67,6 +67,16 @@ enum OrderType {
   DELIVERY @map("delivery")
 }
 
+enum DeliveryStatus {
+  PENDING    @map("pending")
+  QUOTED     @map("quoted")
+  REQUESTED  @map("requested")
+  PICKED_UP  @map("picked_up")
+  DROPPED_OFF @map("dropped_off")
+  CANCELLED  @map("cancelled")
+  FAILED     @map("failed")
+}
+
 enum DietaryTag {
   VEGETARIAN    @map("vegetarian")
   VEGAN         @map("vegan")
@@ -233,6 +243,7 @@ model Order {
   table      Table?      @relation(fields: [tableId], references: [id], onDelete: Restrict)
   items      OrderItem[]
   payments   Payment[]
+  delivery   Delivery?
 
   @@index([restaurantId, status])
   @@index([tableId])
@@ -404,4 +415,23 @@ model Payment {
   @@index([orderId])
   @@index([tableId])
   @@map("payments")
+}
+
+model Delivery {
+  id          String         @id @default(cuid())
+  orderId     Int            @unique @map("order_id")
+  provider    String
+  externalId  String?        @map("external_id")
+  quoteId     String?        @map("quote_id")
+  status      DeliveryStatus @default(PENDING)
+  trackingUrl String?        @map("tracking_url")
+  fee         Decimal?       @db.Decimal(10, 2)
+  currency    String         @default("usd")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([provider, externalId])
+  @@map("deliveries")
 }

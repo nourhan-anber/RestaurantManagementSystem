@@ -14,3 +14,11 @@ export function getStripe(): Stripe | null {
 export function isBillingConfigured(): boolean {
   return Boolean(process.env.STRIPE_SECRET_KEY && process.env.STRIPE_PRICE_ID);
 }
+
+/**
+ * Storefront online order payments are available. Wired to real Stripe PaymentIntents
+ * in P3; false for now so the storefront defaults to pay-on-arrival.
+ */
+export function isOnlinePaymentConfigured(): boolean {
+  return false;
+}

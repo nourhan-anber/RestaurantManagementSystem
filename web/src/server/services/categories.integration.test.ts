@@ -15,7 +15,7 @@ const db = new PrismaClient({ adapter });
 
 async function reset() {
   await db.$executeRawUnsafe(
-    'TRUNCATE order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
+    'TRUNCATE deliveries, order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
   );
 }
 const restaurant = () => db.restaurant.create({ data: { name: 'B', slug: 'b' } });
