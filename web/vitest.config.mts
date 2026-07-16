@@ -14,10 +14,23 @@ export default defineConfig({
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
-      // Enforced quality gate (see plan §Engineering Workflow). Widen `include`
-      // as each phase lands tested modules: lib -> server -> components.
-      include: ['src/lib/**/*.{ts,tsx}'],
-      exclude: ['**/*.{test,spec}.*', '**/*.d.ts', '**/types.ts'],
+      // Enforced quality gate (see plan §Engineering Workflow). Unit-tested logic
+      // lives in lib/server/components; framework wiring (client singleton, NextAuth
+      // setup, route handlers) is exercised by integration/e2e and excluded here.
+      include: [
+        'src/lib/**/*.{ts,tsx}',
+        'src/server/**/*.{ts,tsx}',
+        'src/components/**/*.{ts,tsx}',
+      ],
+      exclude: [
+        '**/*.{test,spec}.*',
+        '**/*.integration.test.*',
+        '**/*.d.ts',
+        '**/types.ts',
+        'src/generated/**',
+        'src/server/db.ts',
+        'src/server/auth.ts',
+      ],
       thresholds: { lines: 90, functions: 90, branches: 90, statements: 90 },
     },
   },
