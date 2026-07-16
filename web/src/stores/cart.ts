@@ -4,15 +4,15 @@ import { addLine, decrementLine, removeLine, type CartAddable, type CartLine } f
 interface CartState {
   lines: CartLine[];
   add: (item: CartAddable) => void;
-  decrement: (menuItemId: number) => void;
-  remove: (menuItemId: number) => void;
+  decrement: (lineId: string) => void;
+  remove: (lineId: string) => void;
   clear: () => void;
 }
 
 export const useCart = create<CartState>((set) => ({
   lines: [],
   add: (item) => set((s) => ({ lines: addLine(s.lines, item) })),
-  decrement: (id) => set((s) => ({ lines: decrementLine(s.lines, id) })),
-  remove: (id) => set((s) => ({ lines: removeLine(s.lines, id) })),
+  decrement: (lineId) => set((s) => ({ lines: decrementLine(s.lines, lineId) })),
+  remove: (lineId) => set((s) => ({ lines: removeLine(s.lines, lineId) })),
   clear: () => set({ lines: [] }),
 }));

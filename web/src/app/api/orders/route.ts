@@ -12,7 +12,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: 'invalid request' }, { status: 400 });
   }
-  const { slug, tableNumber, token, items, notes } = parsed.data;
+  const { slug, tableNumber, token, items, notes, guestName, guestEmail } = parsed.data;
 
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) return NextResponse.json({ error: 'not found' }, { status: 404 });
@@ -26,7 +26,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'invalid token for this table' }, { status: 403 });
   }
 
-  const result = await placeOrder(db, restaurant.id, table.id, items, notes);
+  const result = await placeOrder(db, restaurant.id, table.id, items, { notes, guestName, guestEmail });
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: 400 });
   }

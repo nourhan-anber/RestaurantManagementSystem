@@ -40,7 +40,23 @@ export default async function DinePage({
   const items = await db.menuItem.findMany({
     where: { restaurantId: restaurant.id, isAvailable: true, category: { isHidden: false } },
     orderBy: [{ category: { position: 'asc' } }, { name: 'asc' }],
-    include: { category: { select: { name: true } } },
+    include: {
+      category: { select: { name: true } },
+      modifierGroups: {
+        orderBy: { position: 'asc' },
+        select: {
+          id: true,
+          name: true,
+          minSelect: true,
+          maxSelect: true,
+          options: {
+            where: { isAvailable: true },
+            orderBy: { position: 'asc' },
+            select: { id: true, name: true, priceDelta: true },
+          },
+        },
+      },
+    },
   });
   const menu: CustomerMenuItem[] = items.map((i) => ({
     id: i.id,
@@ -51,6 +67,13 @@ export default async function DinePage({
     imageUrl: i.imageUrl,
     dietaryTags: i.dietaryTags,
     spiceLevel: i.spiceLevel,
+    groups: i.modifierGroups.map((g) => ({
+      id: g.id,
+      name: g.name,
+      minSelect: g.minSelect,
+      maxSelect: g.maxSelect,
+      options: g.options.map((o) => ({ id: o.id, name: o.name, priceDelta: Number(o.priceDelta) })),
+    })),
   }));
 
   return (

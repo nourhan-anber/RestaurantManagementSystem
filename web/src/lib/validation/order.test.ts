@@ -26,4 +26,14 @@ describe('placeOrderSchema', () => {
   it('rejects a missing token', () => {
     expect(placeOrderSchema.safeParse({ ...valid, token: '' }).success).toBe(false);
   });
+
+  it('defaults optionIds to [] and accepts guest fields', () => {
+    const parsed = placeOrderSchema.parse({ ...valid, guestName: 'Sam', guestEmail: 'sam@x.com' });
+    expect(parsed.items[0].optionIds).toEqual([]);
+    expect(parsed.guestName).toBe('Sam');
+  });
+
+  it('rejects an invalid guest email', () => {
+    expect(placeOrderSchema.safeParse({ ...valid, guestEmail: 'nope' }).success).toBe(false);
+  });
 });
