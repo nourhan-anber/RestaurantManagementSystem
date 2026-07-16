@@ -147,11 +147,27 @@ async function main() {
     },
   });
 
+  const branding = {
+    description: 'Modern Italian — wood-fired pizza, fresh pasta, and cocktails.',
+    phone: '+1 212 555 0100',
+    address: '12 Vine Street, New York, NY 10012',
+    timezone: 'America/New_York',
+    onlineOrderingEnabled: true,
+  };
   const restaurant = await db.restaurant.upsert({
     where: { slug: 'bella-vista' },
-    update: {},
-    create: { name: 'Bella Vista', slug: 'bella-vista' },
+    update: branding,
+    create: { name: 'Bella Vista', slug: 'bella-vista', ...branding },
   });
+
+  // Opening hours: 11:00–22:00 daily, closed Mondays (day 1).
+  for (let day = 0; day < 7; day += 1) {
+    await db.openingHours.upsert({
+      where: { restaurantId_dayOfWeek: { restaurantId: restaurant.id, dayOfWeek: day } },
+      update: { opensMinutes: 660, closesMinutes: 1320, isClosed: day === 1 },
+      create: { restaurantId: restaurant.id, dayOfWeek: day, opensMinutes: 660, closesMinutes: 1320, isClosed: day === 1 },
+    });
+  }
 
   const owner = await db.user.upsert({
     where: { email: OWNER_EMAIL },

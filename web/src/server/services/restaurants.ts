@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { uniqueSlug } from '@/lib/slug';
+import type { BrandingInput, HoursInput } from '@/lib/validation/restaurant';
 
 export interface ProvisionRestaurantInput {
   name: string;
@@ -39,4 +40,37 @@ export async function provisionRestaurant(
     });
     return { restaurantId: restaurant.id, slug };
   });
+}
+
+// ─────────────────────── Branding + hours ───────────────────────
+
+export function getOpeningHours(db: PrismaClient, restaurantId: number) {
+  return db.openingHours.findMany({ where: { restaurantId }, orderBy: { dayOfWeek: 'asc' } });
+}
+
+export function updateRestaurantBranding(
+  db: PrismaClient,
+  restaurantId: number,
+  input: BrandingInput,
+) {
+  return db.restaurant.update({
+    where: { id: restaurantId },
+    data: {
+      name: input.name,
+      description: input.description ?? null,
+      phone: input.phone ?? null,
+      address: input.address ?? null,
+      timezone: input.timezone,
+      logoUrl: input.logoUrl ?? null,
+      onlineOrderingEnabled: input.onlineOrderingEnabled,
+    },
+  });
+}
+
+/** Replace the whole week of hours atomically (one row per day). */
+export async function setOpeningHours(db: PrismaClient, restaurantId: number, rows: HoursInput) {
+  await db.$transaction([
+    db.openingHours.deleteMany({ where: { restaurantId } }),
+    db.openingHours.createMany({ data: rows.map((r) => ({ restaurantId, ...r })) }),
+  ]);
 }

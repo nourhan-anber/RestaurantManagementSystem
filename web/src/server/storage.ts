@@ -1,5 +1,10 @@
 export interface StorageProvider {
-  upload(input: { bytes: Buffer; contentType: string; filename: string }): Promise<{ url: string }>;
+  upload(input: {
+    bytes: Buffer;
+    contentType: string;
+    filename: string;
+    keyPrefix: string;
+  }): Promise<{ url: string }>;
 }
 
 let cached: StorageProvider | null = null;
@@ -14,9 +19,9 @@ export function getStorageProvider(): StorageProvider | null {
   const token = process.env.BLOB_READ_WRITE_TOKEN;
   if (!token) return null;
   cached ??= {
-    async upload({ bytes, contentType, filename }) {
+    async upload({ bytes, contentType, filename, keyPrefix }) {
       const { put } = await import('@vercel/blob');
-      const blob = await put(`menu/${filename}`, bytes, {
+      const blob = await put(`${keyPrefix}/${filename}`, bytes, {
         access: 'public',
         contentType,
         token,

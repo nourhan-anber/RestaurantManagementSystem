@@ -4,8 +4,11 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { getSubscription } from '@/server/services/billing';
+import { getOpeningHours } from '@/server/services/restaurants';
 import { isBillingConfigured } from '@/server/stripe';
+import { isUploadConfigured } from '@/server/storage';
 import { BillingPanel } from './billing-panel';
+import { BrandingForm } from './branding-form';
 
 export default async function SettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -17,7 +20,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) notFound();
 
-  const sub = await getSubscription(db, restaurant.id);
+  const [sub, hours] = await Promise.all([
+    getSubscription(db, restaurant.id),
+    getOpeningHours(db, restaurant.id),
+  ]);
   const renewsOn =
     sub?.currentPeriodEnd ? sub.currentPeriodEnd.toLocaleDateString('en-US') : null;
 
@@ -28,26 +34,34 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
       </Link>
       <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground">Settings</h1>
 
-      <section className="mt-6 rounded-[var(--radius)] border border-border bg-surface p-5">
-        <h2 className="font-display text-lg text-foreground">Restaurant</h2>
-        <dl className="mt-3 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <dt className="text-muted">Name</dt>
-            <dd className="text-foreground">{restaurant.name}</dd>
-          </div>
-          <div className="flex justify-between">
-            <dt className="text-muted">Address</dt>
-            <dd className="font-mono text-foreground">/{restaurant.slug}</dd>
-          </div>
-        </dl>
-      </section>
-
-      <BillingPanel
+      <BrandingForm
         slug={slug}
-        status={sub?.status ?? null}
-        configured={isBillingConfigured()}
-        renewsOn={renewsOn}
+        restaurant={{
+          name: restaurant.name,
+          description: restaurant.description,
+          phone: restaurant.phone,
+          address: restaurant.address,
+          timezone: restaurant.timezone,
+          logoUrl: restaurant.logoUrl,
+          onlineOrderingEnabled: restaurant.onlineOrderingEnabled,
+        }}
+        hours={hours.map((h) => ({
+          dayOfWeek: h.dayOfWeek,
+          opensMinutes: h.opensMinutes,
+          closesMinutes: h.closesMinutes,
+          isClosed: h.isClosed,
+        }))}
+        uploadConfigured={isUploadConfigured()}
       />
+
+      <div className="mt-6">
+        <BillingPanel
+          slug={slug}
+          status={sub?.status ?? null}
+          configured={isBillingConfigured()}
+          renewsOn={renewsOn}
+        />
+      </div>
     </div>
   );
 }

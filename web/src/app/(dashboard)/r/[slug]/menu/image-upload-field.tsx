@@ -7,10 +7,14 @@ export function ImageUploadField({
   slug,
   defaultUrl,
   configured,
+  kind = 'menu',
+  name = 'imageUrl',
 }: {
   slug: string;
   defaultUrl: string;
   configured: boolean;
+  kind?: 'menu' | 'branding';
+  name?: string;
 }) {
   const [url, setUrl] = useState(defaultUrl);
   const [busy, setBusy] = useState(false);
@@ -24,7 +28,10 @@ export function ImageUploadField({
     try {
       const body = new FormData();
       body.append('file', file);
-      const res = await fetch(`/api/uploads?slug=${encodeURIComponent(slug)}`, { method: 'POST', body });
+      const res = await fetch(`/api/uploads?slug=${encodeURIComponent(slug)}&kind=${kind}`, {
+        method: 'POST',
+        body,
+      });
       if (!res.ok) throw new Error(String(res.status));
       const data = (await res.json()) as { url: string };
       setUrl(data.url);
@@ -37,7 +44,7 @@ export function ImageUploadField({
 
   return (
     <div className="space-y-2">
-      <Input name="imageUrl" type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
+      <Input name={name} type="url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://…" />
       {configured ? (
         <div className="flex items-center gap-2">
           <input

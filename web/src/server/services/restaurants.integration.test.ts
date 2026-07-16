@@ -1,14 +1,19 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
-import { provisionRestaurant } from './restaurants';
+import {
+  getOpeningHours,
+  provisionRestaurant,
+  setOpeningHours,
+  updateRestaurantBranding,
+} from './restaurants';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const db = new PrismaClient({ adapter });
 
 async function reset() {
   await db.$executeRawUnsafe(
-    'TRUNCATE order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, restaurants, users RESTART IDENTITY CASCADE',
+    'TRUNCATE order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
   );
 }
 
@@ -54,5 +59,62 @@ describe('provisionRestaurant', () => {
       include: { memberships: true },
     });
     expect(user.memberships).toHaveLength(2);
+  });
+});
+
+describe('branding + opening hours', () => {
+  it('persists branding fields and nulls optionals that are omitted', async () => {
+    const { restaurantId } = await provisionRestaurant(db, input);
+
+    await updateRestaurantBranding(db, restaurantId, {
+      name: 'Bella Vista',
+      description: 'Wood-fired pizza',
+      phone: '+1 212 555 0100',
+      address: '12 Vine St',
+      timezone: 'America/New_York',
+      logoUrl: 'https://cdn.test/logo.png',
+      onlineOrderingEnabled: true,
+    });
+    let fresh = await db.restaurant.findUniqueOrThrow({ where: { id: restaurantId } });
+    expect(fresh).toMatchObject({
+      description: 'Wood-fired pizza',
+      phone: '+1 212 555 0100',
+      timezone: 'America/New_York',
+      logoUrl: 'https://cdn.test/logo.png',
+      onlineOrderingEnabled: true,
+    });
+
+    // Omitting optionals clears them back to null.
+    await updateRestaurantBranding(db, restaurantId, {
+      name: 'Bella Vista',
+      timezone: 'UTC',
+      onlineOrderingEnabled: false,
+    });
+    fresh = await db.restaurant.findUniqueOrThrow({ where: { id: restaurantId } });
+    expect(fresh.description).toBeNull();
+    expect(fresh.logoUrl).toBeNull();
+    expect(fresh.onlineOrderingEnabled).toBe(false);
+  });
+
+  it('replaces the whole week of hours atomically and reads them ordered', async () => {
+    const { restaurantId } = await provisionRestaurant(db, input);
+    const week = Array.from({ length: 7 }, (_, day) => ({
+      dayOfWeek: day,
+      opensMinutes: 660,
+      closesMinutes: 1320,
+      isClosed: day === 1,
+    }));
+
+    await setOpeningHours(db, restaurantId, week);
+    let rows = await getOpeningHours(db, restaurantId);
+    expect(rows).toHaveLength(7);
+    expect(rows.map((r) => r.dayOfWeek)).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    expect(rows.find((r) => r.dayOfWeek === 1)?.isClosed).toBe(true);
+
+    // Re-saving replaces (no duplicate day rows, @@unique holds).
+    await setOpeningHours(db, restaurantId, week.map((r) => ({ ...r, opensMinutes: 600 })));
+    rows = await getOpeningHours(db, restaurantId);
+    expect(rows).toHaveLength(7);
+    expect(rows.every((r) => r.opensMinutes === 600)).toBe(true);
   });
 });

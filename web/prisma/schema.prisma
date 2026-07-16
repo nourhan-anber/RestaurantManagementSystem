@@ -79,14 +79,21 @@ enum DietaryTag {
 // ─────────────────────── Tenant + domain ───────────────────────
 
 model Restaurant {
-  id        Int      @id @default(autoincrement())
-  name      String
-  slug      String   @unique
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id                    Int      @id @default(autoincrement())
+  name                  String
+  slug                  String   @unique
+  description           String?
+  logoUrl               String?  @map("logo_url")
+  phone                 String?
+  address               String?
+  timezone              String   @default("UTC")
+  onlineOrderingEnabled Boolean  @default(false) @map("online_ordering_enabled")
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
 
   menuItems      MenuItem[]
   menuCategories MenuCategory[]
+  openingHours   OpeningHours[]
   tables         Table[]
   orders         Order[]
   memberships    Membership[]
@@ -95,6 +102,22 @@ model Restaurant {
   payments       Payment[]
 
   @@map("restaurants")
+}
+
+model OpeningHours {
+  id            String   @id @default(cuid())
+  restaurantId  Int      @map("restaurant_id")
+  dayOfWeek     Int      @map("day_of_week") // 0=Sunday .. 6=Saturday
+  opensMinutes  Int      @map("opens_minutes") // minutes from local midnight
+  closesMinutes Int      @map("closes_minutes")
+  isClosed      Boolean  @default(false) @map("is_closed")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, dayOfWeek])
+  @@map("opening_hours")
 }
 
 model MenuItem {
