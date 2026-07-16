@@ -30,6 +30,7 @@ export default defineConfig({
         'src/generated/**',
         'src/server/db.ts',
         'src/server/auth.ts',
+        'src/server/tenant.ts',
       ],
       thresholds: { lines: 90, functions: 90, branches: 90, statements: 90 },
     },
