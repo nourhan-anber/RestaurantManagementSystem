@@ -3,9 +3,10 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
 import {
   advanceOrderStatus,
-  closeBill,
   listKitchenOrders,
+  placeOnlineOrder,
   placeOrder,
+  settleBill,
 } from './orders';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
@@ -44,7 +45,7 @@ describe('orders service', () => {
 
     const kds = await listKitchenOrders(db, r.id);
     expect(kds).toHaveLength(1);
-    expect(kds[0].table.number).toBe(1);
+    expect(kds[0].table?.number).toBe(1);
     expect(kds[0].items[0].menuItem.name).toBe('Dish');
   });
 
@@ -61,18 +62,62 @@ describe('orders service', () => {
     });
   });
 
-  it('advance is tenant-scoped; closing the bill reopens the table', async () => {
+  it('advance is tenant-scoped; settling the bill records a payment and reopens the table', async () => {
     const { r, table, item } = await fixture();
-    const placed = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
-    if (!placed.ok) throw new Error('expected ok');
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]); // $10
+    const placed2 = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]); // $20
+    if (!placed2.ok) throw new Error('expected ok');
 
     // Cross-tenant advance touches zero rows.
-    expect((await advanceOrderStatus(db, 9999, placed.orderId, 'PREPARING')).count).toBe(0);
-    expect((await advanceOrderStatus(db, r.id, placed.orderId, 'PREPARING')).count).toBe(1);
+    expect((await advanceOrderStatus(db, 9999, placed2.orderId, 'PREPARING')).count).toBe(0);
+    expect((await advanceOrderStatus(db, r.id, placed2.orderId, 'PREPARING')).count).toBe(1);
 
-    await closeBill(db, r.id, table.id);
+    const settled = await settleBill(db, r.id, table.id, { method: 'CARD', transactionId: 'auth_9' });
+    expect(settled).toMatchObject({ ok: true, amount: 30 });
+
+    const payment = await db.payment.findFirstOrThrow({ where: { restaurantId: r.id } });
+    expect(payment.method).toBe('CARD');
+    expect(payment.transactionId).toBe('auth_9');
+    expect(Number(payment.amount)).toBe(30);
+    expect(payment.tableId).toBe(table.id);
+
     expect((await db.table.findUniqueOrThrow({ where: { id: table.id } })).status).toBe('OPEN');
     expect(await listKitchenOrders(db, r.id)).toHaveLength(0);
+
+    // Re-settling an empty table records nothing.
+    expect(await settleBill(db, r.id, table.id, { method: 'CASH' })).toEqual({ ok: false, reason: 'empty' });
+    expect(await db.payment.count({ where: { restaurantId: r.id } })).toBe(1);
+  });
+
+  it('places tableless online orders without touching table status', async () => {
+    const { r, table, item } = await fixture();
+    // Occupy the dine-in table so we can prove the online order does not change it.
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
+    const before = (await db.table.findUniqueOrThrow({ where: { id: table.id } })).status;
+
+    const pickup = await placeOnlineOrder(
+      db,
+      r.id,
+      { kind: 'pickup', customerName: 'Sam', customerPhone: '555-0100' },
+      [{ menuItemId: item.id, quantity: 1 }],
+    );
+    expect(pickup.ok).toBe(true);
+
+    const delivery = await placeOnlineOrder(
+      db,
+      r.id,
+      { kind: 'delivery', customerName: 'Ada', customerPhone: '555-0101', deliveryAddress: '1 Main St' },
+      [{ menuItemId: item.id, quantity: 2 }],
+    );
+    expect(delivery.ok).toBe(true);
+
+    const online = await db.order.findMany({ where: { restaurantId: r.id, tableId: null } });
+    expect(online).toHaveLength(2);
+    expect(online.map((o) => o.orderType).sort()).toEqual(['DELIVERY', 'PICKUP']);
+    expect(online.every((o) => o.tableId === null)).toBe(true);
+
+    // The dine-in table's status is unchanged by the online orders.
+    expect((await db.table.findUniqueOrThrow({ where: { id: table.id } })).status).toBe(before);
   });
 });
 

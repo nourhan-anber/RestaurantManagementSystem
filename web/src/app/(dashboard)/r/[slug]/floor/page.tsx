@@ -4,9 +4,8 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { listFloor } from '@/server/services/orders';
-import { closeTableBill } from '@/server/actions/orders';
 import { formatMoney } from '@/lib/format';
-import { Button } from '@/components/ui/button';
+import { SettleBill } from './settle-modal';
 
 const STATUS_STYLES: Record<string, string> = {
   OPEN: 'border-border',
@@ -66,11 +65,7 @@ export default async function FloorPage({ params }: { params: Promise<{ slug: st
               )}
 
               {t.orders.length > 0 ? (
-                <form action={closeTableBill.bind(null, slug, t.id)} className="mt-4">
-                  <Button type="submit" size="sm" variant="secondary" className="w-full">
-                    Close bill · {formatMoney(activeTotal)}
-                  </Button>
-                </form>
+                <SettleBill slug={slug} tableId={t.id} amount={activeTotal} />
               ) : null}
             </div>
           );

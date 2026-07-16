@@ -20,8 +20,14 @@ export interface KdsOrder {
   notes: string | null;
   guestName: string | null;
   createdAt: string;
-  tableNumber: number;
+  tableNumber: number | null;
+  orderType: 'DINE_IN' | 'PICKUP' | 'DELIVERY';
   items: KdsItem[];
+}
+
+function orderLabel(o: KdsOrder): string {
+  if (o.tableNumber != null) return `Table ${o.tableNumber}`;
+  return o.orderType === 'DELIVERY' ? 'Delivery' : 'Pickup';
 }
 
 const COLUMNS = [
@@ -94,7 +100,7 @@ export function KitchenBoard({ slug, initialOrders }: { slug: string; initialOrd
                   <div key={o.id} className="rounded-[var(--radius)] border border-border bg-surface p-4">
                     <div className="flex items-center justify-between">
                       <span className="font-display text-lg text-foreground">
-                        Table {o.tableNumber}
+                        {orderLabel(o)}
                         {o.guestName ? <span className="ml-1.5 text-sm font-normal text-muted">· {o.guestName}</span> : null}
                       </span>
                       <span className="text-xs text-muted">{timeAgo(o.createdAt)}</span>

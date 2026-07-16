@@ -24,7 +24,8 @@ export async function GET(_req: Request, { params }: { params: Promise<{ slug: s
       notes: o.notes,
       guestName: o.guestName,
       createdAt: o.createdAt.toISOString(),
-      tableNumber: o.table.number,
+      tableNumber: o.table?.number ?? null,
+      orderType: o.orderType,
       items: o.items.map((it) => ({
         id: it.id,
         name: it.menuItem.name,
