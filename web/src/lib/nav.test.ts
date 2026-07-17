@@ -11,6 +11,7 @@ describe('visibleSections', () => {
       'kitchen',
       'floor',
       'staff',
+      'orders',
       'customers',
       'reports',
       'settings',
@@ -24,6 +25,7 @@ describe('visibleSections', () => {
       'kitchen',
       'floor',
       'staff',
+      'orders',
       'customers',
       'reports',
     ]);

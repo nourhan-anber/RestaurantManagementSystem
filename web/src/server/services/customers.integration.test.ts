@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
 import { placeOnlineOrder, placeOrder } from './orders';
-import { listCustomers, upsertCustomerForOrder } from './customers';
+import { getCustomer, listCustomers, upsertCustomerForOrder } from './customers';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const db = new PrismaClient({ adapter });
@@ -92,7 +92,8 @@ describe('customers linked to orders', () => {
       { guestEmail: 'sam@x.com' },
     );
 
-    const rows = await listCustomers(db, r.id);
+    const { rows, total } = await listCustomers(db, r.id);
+    expect(total).toBe(1);
     expect(rows).toHaveLength(1);
     expect(rows[0].orders).toBe(2);
     expect(rows[0].email).toBe('sam@x.com');
@@ -103,5 +104,44 @@ describe('customers linked to orders', () => {
     const { r, table, item } = await fixture();
     await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
     expect(await db.customer.count({ where: { restaurantId: r.id } })).toBe(0);
+  });
+});
+
+describe('listCustomers search + pagination, getCustomer', () => {
+  it('searches by name, email, and phone (formatting-insensitive), tenant-scoped', async () => {
+    const r = await db.restaurant.create({ data: { name: 'R', slug: 'r' } });
+    const other = await db.restaurant.create({ data: { name: 'O', slug: 'o' } });
+    await upsertCustomerForOrder(db, r.id, { name: 'Ada Lovelace', phone: '416-555-0111', email: 'ada@x.com' });
+    await upsertCustomerForOrder(db, r.id, { name: 'Bob Jones', phone: '647-555-0222', email: 'bob@y.com' });
+    await upsertCustomerForOrder(db, other.id, { name: 'Ada Other', email: 'ada@z.com' });
+
+    expect((await listCustomers(db, r.id, { search: 'lovelace' })).total).toBe(1);
+    expect((await listCustomers(db, r.id, { search: 'bob@y' })).total).toBe(1);
+    // Phone search ignores formatting.
+    expect((await listCustomers(db, r.id, { search: '(416) 555-0111' })).total).toBe(1);
+    expect((await listCustomers(db, r.id, { search: 'ada' })).total).toBe(1); // not the other tenant's Ada
+    expect((await listCustomers(db, r.id, { search: 'nobody' })).total).toBe(0);
+  });
+
+  it('paginates with a stable total', async () => {
+    const r = await db.restaurant.create({ data: { name: 'R', slug: 'r' } });
+    for (let i = 0; i < 5; i += 1) {
+      await upsertCustomerForOrder(db, r.id, { name: `C${i}`, email: `c${i}@x.com` });
+    }
+    const p1 = await listCustomers(db, r.id, { skip: 0, take: 2 });
+    const p2 = await listCustomers(db, r.id, { skip: 2, take: 2 });
+    expect(p1.total).toBe(5);
+    expect(p1.rows).toHaveLength(2);
+    expect(p2.rows).toHaveLength(2);
+    expect(p1.rows[0].id).not.toBe(p2.rows[0].id);
+  });
+
+  it('getCustomer is tenant-scoped', async () => {
+    const r = await db.restaurant.create({ data: { name: 'R', slug: 'r' } });
+    const other = await db.restaurant.create({ data: { name: 'O', slug: 'o' } });
+    const id = await upsertCustomerForOrder(db, r.id, { email: 'x@x.com' });
+    if (!id) throw new Error('expected id');
+    expect((await getCustomer(db, r.id, id))?.id).toBe(id);
+    expect(await getCustomer(db, other.id, id)).toBeNull();
   });
 });

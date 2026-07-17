@@ -62,27 +62,64 @@ export interface CustomerRow {
   lastOrderAt: Date | null;
 }
 
-/** The restaurant's customer directory, most-recent order first. */
+export interface ListCustomersOptions {
+  search?: string;
+  skip?: number;
+  take?: number;
+}
+
+/** Build the tenant-scoped where clause, matching name/email/phone on a search term. */
+function customerWhere(restaurantId: number, search?: string) {
+  const term = search?.trim();
+  if (!term) return { restaurantId };
+  const digits = term.replace(/\D/g, '');
+  return {
+    restaurantId,
+    OR: [
+      { name: { contains: term, mode: 'insensitive' as const } },
+      { email: { contains: term, mode: 'insensitive' as const } },
+      ...(digits ? [{ phone: { contains: digits } }] : []),
+    ],
+  };
+}
+
+/**
+ * The restaurant's customer directory: newest customers first, optionally filtered
+ * by a name/email/phone search and paginated. Returns the page rows plus the total
+ * matching count (for pagination controls).
+ */
 export async function listCustomers(
   db: PrismaClient,
   restaurantId: number,
-): Promise<CustomerRow[]> {
-  const customers = await db.customer.findMany({
-    where: { restaurantId },
-    include: {
-      _count: { select: { orders: true } },
-      orders: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
-    },
-  });
+  opts: ListCustomersOptions = {},
+): Promise<{ rows: CustomerRow[]; total: number }> {
+  const where = customerWhere(restaurantId, opts.search);
+  const [customers, total] = await Promise.all([
+    db.customer.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: opts.skip,
+      take: opts.take,
+      include: {
+        _count: { select: { orders: true } },
+        orders: { orderBy: { createdAt: 'desc' }, take: 1, select: { createdAt: true } },
+      },
+    }),
+    db.customer.count({ where }),
+  ]);
 
-  return customers
-    .map((c) => ({
-      id: c.id,
-      name: c.name,
-      phone: c.phone,
-      email: c.email,
-      orders: c._count.orders,
-      lastOrderAt: c.orders[0]?.createdAt ?? null,
-    }))
-    .sort((a, b) => (b.lastOrderAt?.getTime() ?? 0) - (a.lastOrderAt?.getTime() ?? 0));
+  const rows = customers.map((c) => ({
+    id: c.id,
+    name: c.name,
+    phone: c.phone,
+    email: c.email,
+    orders: c._count.orders,
+    lastOrderAt: c.orders[0]?.createdAt ?? null,
+  }));
+  return { rows, total };
+}
+
+/** A single customer, tenant-scoped (null if not found in this restaurant). */
+export function getCustomer(db: PrismaClient, restaurantId: number, customerId: number) {
+  return db.customer.findFirst({ where: { id: customerId, restaurantId } });
 }

@@ -4,6 +4,7 @@ import { PrismaClient } from '@/generated/prisma/client';
 import {
   advanceOrderStatus,
   listKitchenOrders,
+  listOrders,
   placeOnlineOrder,
   placeOrder,
   settleBill,
@@ -251,5 +252,42 @@ describe('order tax', () => {
     const payment = await db.payment.findFirstOrThrow({ where: { restaurantId: r.id } });
     expect(Number(payment.amount)).toBe(33.9);
     expect(Number(payment.taxAmount)).toBe(3.9);
+  });
+});
+
+describe('listOrders', () => {
+  it('lists newest-first, filters by customer and date, and paginates', async () => {
+    const { r, table, item } = await fixture();
+    // Two dine-in orders, plus one online (has a customer).
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]);
+    const online = await placeOnlineOrder(
+      db,
+      r.id,
+      { kind: 'pickup', customerName: 'Ada', customerPhone: '416-555-0111' },
+      [{ menuItemId: item.id, quantity: 1 }],
+    );
+    if (!online.ok) throw new Error('expected ok');
+    const customer = await db.order.findUniqueOrThrow({ where: { id: online.orderId } });
+
+    const all = await listOrders(db, r.id, {});
+    expect(all.total).toBe(3);
+    expect(all.rows[0].id).toBeGreaterThan(all.rows[1].id); // newest first
+    expect(all.rows[0].customerName).toBe('Ada');
+    expect(all.rows[0].itemCount).toBe(1);
+
+    // Filter by customer.
+    const forCustomer = await listOrders(db, r.id, { customerId: customer.customerId! });
+    expect(forCustomer.total).toBe(1);
+    expect(forCustomer.rows[0].id).toBe(online.orderId);
+
+    // Pagination.
+    const page1 = await listOrders(db, r.id, { skip: 0, take: 2 });
+    expect(page1.total).toBe(3);
+    expect(page1.rows).toHaveLength(2);
+
+    // Date filter that excludes everything (future window).
+    const future = await listOrders(db, r.id, { from: new Date('2099-01-01T00:00:00Z') });
+    expect(future.total).toBe(0);
   });
 });

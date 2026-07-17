@@ -12,6 +12,7 @@ const BUILT_SECTIONS = new Set<string>([
   'staff',
   'kitchen',
   'floor',
+  'orders',
   'customers',
   'reports',
   'settings',

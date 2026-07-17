@@ -1,5 +1,5 @@
 import type { PrismaClient } from '@/generated/prisma/client';
-import type { OrderStatus } from '@/generated/prisma/enums';
+import type { OrderStatus, OrderType } from '@/generated/prisma/enums';
 import { ACTIVE_KITCHEN_STATUSES, TERMINAL_STATUSES } from '@/lib/orders';
 import { priceLine, type ItemSpec } from '@/lib/modifiers';
 import { computeTax } from '@/lib/tax';
@@ -45,6 +45,92 @@ export function listFloor(db: PrismaClient, restaurantId: number) {
       },
     },
   });
+}
+
+/** Full order for the single-order detail view (items + modifiers, payments, delivery). */
+export function getOrderDetail(db: PrismaClient, restaurantId: number, orderId: number) {
+  return db.order.findFirst({
+    where: { id: orderId, restaurantId },
+    include: {
+      items: {
+        orderBy: { id: 'asc' },
+        include: { menuItem: { select: { name: true } }, modifiers: { orderBy: { id: 'asc' } } },
+      },
+      table: { select: { number: true } },
+      customer: { select: { id: true, name: true, phone: true, email: true } },
+      payments: { orderBy: { createdAt: 'asc' } },
+      delivery: true,
+    },
+  });
+}
+
+export interface OrderListItem {
+  id: number;
+  createdAt: Date;
+  requestedTime: Date | null;
+  orderType: OrderType;
+  status: OrderStatus;
+  subtotal: number;
+  taxAmount: number;
+  total: number;
+  customerName: string | null;
+  tableNumber: number | null;
+  itemCount: number;
+}
+
+export interface ListOrdersOptions {
+  customerId?: number;
+  from?: Date;
+  to?: Date;
+  skip?: number;
+  take?: number;
+}
+
+/**
+ * Tenant-scoped order history, newest first — for the restaurant orders page and a
+ * customer's order history. Optionally filtered by customer and a createdAt range,
+ * and paginated. Returns the page rows plus the total matching count.
+ */
+export async function listOrders(
+  db: PrismaClient,
+  restaurantId: number,
+  opts: ListOrdersOptions = {},
+): Promise<{ rows: OrderListItem[]; total: number }> {
+  const where = {
+    restaurantId,
+    ...(opts.customerId ? { customerId: opts.customerId } : {}),
+    ...(opts.from || opts.to
+      ? { createdAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) } }
+      : {}),
+  };
+  const [orders, total] = await Promise.all([
+    db.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: opts.skip,
+      take: opts.take,
+      include: {
+        table: { select: { number: true } },
+        _count: { select: { items: true } },
+      },
+    }),
+    db.order.count({ where }),
+  ]);
+
+  const rows: OrderListItem[] = orders.map((o) => ({
+    id: o.id,
+    createdAt: o.createdAt,
+    requestedTime: o.requestedTime,
+    orderType: o.orderType,
+    status: o.status,
+    subtotal: Number(o.subtotal),
+    taxAmount: Number(o.taxAmount),
+    total: Number(o.total),
+    customerName: o.customerName ?? o.guestName,
+    tableNumber: o.table?.number ?? null,
+    itemCount: o._count.items,
+  }));
+  return { rows, total };
 }
 
 export type SettleResult =

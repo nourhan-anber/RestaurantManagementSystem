@@ -4,9 +4,20 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { listCustomers } from '@/server/services/customers';
+import { pageInfo, parsePage } from '@/lib/pagination';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Pager } from '../pager';
 
-export default async function CustomersPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function CustomersPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ q?: string; page?: string }>;
+}) {
   const { slug } = await params;
+  const { q, page: pageParam } = await searchParams;
 
   const session = await auth();
   const membership = session?.user ? findMembership(session.user.memberships, slug) : undefined;
@@ -15,7 +26,9 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) notFound();
 
-  const customers = await listCustomers(db, restaurant.id);
+  const { page, pageSize, skip, take } = parsePage(pageParam);
+  const { rows, total } = await listCustomers(db, restaurant.id, { search: q, skip, take });
+  const info = pageInfo(total, page, pageSize);
 
   return (
     <div>
@@ -23,40 +36,56 @@ export default async function CustomersPage({ params }: { params: Promise<{ slug
         ← Overview
       </Link>
       <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground">Customers</h1>
-      <p className="mt-1 text-sm text-muted">
-        Built automatically from phone and email on orders — {customers.length} total.
-      </p>
+      <p className="mt-1 text-sm text-muted">Built automatically from phone and email on orders.</p>
 
-      {customers.length === 0 ? (
-        <p className="mt-6 text-sm text-muted">No customers yet. They appear here after their first order.</p>
+      <form className="mt-6 flex gap-2" action={`/r/${slug}/customers`}>
+        <Input name="q" defaultValue={q ?? ''} placeholder="Search name, phone, or email" className="max-w-sm" />
+        <Button type="submit" variant="secondary">Search</Button>
+        {q ? (
+          <Link href={`/r/${slug}/customers`} className="self-center text-sm text-muted hover:text-foreground">
+            Clear
+          </Link>
+        ) : null}
+      </form>
+
+      {rows.length === 0 ? (
+        <p className="mt-6 text-sm text-muted">
+          {q ? 'No customers match your search.' : 'No customers yet. They appear here after their first order.'}
+        </p>
       ) : (
-        <div className="mt-6 overflow-hidden rounded-[var(--radius)] border border-border bg-surface">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-xs uppercase tracking-wide text-muted">
-                <th className="px-4 py-3 font-medium">Name</th>
-                <th className="px-4 py-3 font-medium">Phone</th>
-                <th className="px-4 py-3 font-medium">Email</th>
-                <th className="px-4 py-3 text-right font-medium">Orders</th>
-                <th className="px-4 py-3 text-right font-medium">Last order</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {customers.map((c) => (
-                <tr key={c.id}>
-                  <td className="px-4 py-3 text-foreground">{c.name ?? <span className="text-muted">—</span>}</td>
-                  <td className="px-4 py-3 tabular-nums text-foreground">{c.phone ?? <span className="text-muted">—</span>}</td>
-                  <td className="px-4 py-3 text-foreground">{c.email ?? <span className="text-muted">—</span>}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-foreground">{c.orders}</td>
-                  <td className="px-4 py-3 text-right tabular-nums text-muted">
+        <div className="mt-4 overflow-hidden rounded-[var(--radius)] border border-border bg-surface">
+          <div className="hidden border-b border-border px-4 py-3 text-xs uppercase tracking-wide text-muted sm:grid sm:grid-cols-[1.5fr_1.2fr_1.5fr_auto_auto] sm:gap-4">
+            <span>Name</span>
+            <span>Phone</span>
+            <span>Email</span>
+            <span className="text-right">Orders</span>
+            <span className="text-right">Last order</span>
+          </div>
+          <ul className="divide-y divide-border">
+            {rows.map((c) => (
+              <li key={c.id}>
+                <Link
+                  href={`/r/${slug}/customers/${c.id}`}
+                  className="grid gap-1 px-4 py-3 transition-colors hover:bg-black/5 sm:grid-cols-[1.5fr_1.2fr_1.5fr_auto_auto] sm:items-center sm:gap-4 dark:hover:bg-white/5"
+                >
+                  <span className="font-medium text-foreground">{c.name ?? <span className="text-muted">—</span>}</span>
+                  <span className="tabular-nums text-muted">{c.phone ?? '—'}</span>
+                  <span className="truncate text-muted">{c.email ?? '—'}</span>
+                  <span className="text-muted sm:text-right">
+                    <span className="sm:hidden">Orders: </span>
+                    <span className="tabular-nums text-foreground">{c.orders}</span>
+                  </span>
+                  <span className="tabular-nums text-muted sm:text-right">
                     {c.lastOrderAt ? c.lastOrderAt.toLocaleDateString('en-US') : '—'}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                  </span>
+                </Link>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
+
+      <Pager basePath={`/r/${slug}/customers`} params={{ q }} info={info} total={total} />
     </div>
   );
 }
