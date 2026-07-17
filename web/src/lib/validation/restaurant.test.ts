@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { brandingSchema, createRestaurantSchema, hoursSchema } from './restaurant';
+import { brandingSchema, createRestaurantSchema, hoursSchema, loyaltySchema } from './restaurant';
 
 const validCreate = {
   name: 'Bella Vista',
@@ -41,5 +41,21 @@ describe('hoursSchema', () => {
   });
   it('rejects out-of-range minutes', () => {
     expect(hoursSchema.safeParse([0, 1, 2, 3, 4, 5, 6].map((d) => ({ ...day(d), opensMinutes: 2000 }))).success).toBe(false);
+  });
+});
+
+describe('loyaltySchema', () => {
+  it('coerces the enabled flag and numeric config', () => {
+    const parsed = loyaltySchema.safeParse({ loyaltyEnabled: true, pointsPerDollar: '2', redeemValuePerPoint: '0.01' });
+    expect(parsed.success).toBe(true);
+    expect(parsed.success && parsed.data).toEqual({ loyaltyEnabled: true, pointsPerDollar: 2, redeemValuePerPoint: 0.01 });
+  });
+
+  it('requires at least 1 point per dollar', () => {
+    expect(loyaltySchema.safeParse({ loyaltyEnabled: false, pointsPerDollar: '0', redeemValuePerPoint: '0.01' }).success).toBe(false);
+  });
+
+  it('rejects a negative redemption value', () => {
+    expect(loyaltySchema.safeParse({ loyaltyEnabled: true, pointsPerDollar: '1', redeemValuePerPoint: '-1' }).success).toBe(false);
   });
 });

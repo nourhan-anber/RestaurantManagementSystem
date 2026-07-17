@@ -155,7 +155,7 @@ export async function listOrders(
 }
 
 export type SettleResult =
-  | { ok: true; amount: number; tip: number; discount: number; orderCount: number }
+  | { ok: true; amount: number; tip: number; discount: number; orderCount: number; orderIds: number[] }
   | { ok: false; reason: 'empty' };
 
 /**
@@ -233,7 +233,7 @@ export async function settleBill(
         status: 'SUCCEEDED' as const,
       })),
     });
-    return { ok: true, amount, tip, discount: comp, orderCount: active.length };
+    return { ok: true, amount, tip, discount: comp, orderCount: active.length, orderIds: recomputed.map((r) => r.id) };
   });
 }
 

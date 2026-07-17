@@ -5,6 +5,7 @@ import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { getCustomer } from '@/server/services/customers';
 import { listOrders } from '@/server/services/orders';
+import { recentLedger } from '@/server/services/loyalty';
 import { pageInfo, parsePage } from '@/lib/pagination';
 import { OrderTable } from '../../order-table';
 import { Pager } from '../../pager';
@@ -34,6 +35,8 @@ export default async function CustomerDetailPage({
   const { rows, total } = await listOrders(db, restaurant.id, { customerId: id, skip, take });
   const info = pageInfo(total, page, pageSize);
 
+  const ledger = restaurant.loyaltyEnabled ? await recentLedger(db, id) : [];
+
   return (
     <div>
       <Link href={`/r/${slug}/customers`} className="text-sm text-muted hover:text-foreground">
@@ -47,6 +50,31 @@ export default async function CustomerDetailPage({
         {customer.email ? <span>✉️ {customer.email}</span> : null}
         <span>{total} order{total === 1 ? '' : 's'}</span>
       </p>
+
+      {restaurant.loyaltyEnabled ? (
+        <section className="mt-6 rounded-[var(--radius)] border border-border bg-surface p-5">
+          <div className="flex items-baseline justify-between">
+            <h2 className="text-xs font-medium uppercase tracking-wide text-muted">Loyalty</h2>
+            <span className="font-display text-xl tabular-nums text-foreground">
+              {customer.points} <span className="text-sm text-muted">points</span>
+            </span>
+          </div>
+          {ledger.length > 0 ? (
+            <ul className="mt-3 space-y-1 text-sm">
+              {ledger.map((l) => (
+                <li key={l.id} className="flex justify-between">
+                  <span className="text-muted">{l.reason === 'earn' ? 'Earned' : l.reason}</span>
+                  <span className={`tabular-nums ${l.delta >= 0 ? 'text-pine' : 'text-ember-600'}`}>
+                    {l.delta >= 0 ? '+' : ''}{l.delta}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="mt-2 text-sm text-muted">No points activity yet.</p>
+          )}
+        </section>
+      ) : null}
 
       <h2 className="mt-6 text-xs font-medium uppercase tracking-wide text-muted">Order history</h2>
       <OrderTable orders={rows} slug={slug} />

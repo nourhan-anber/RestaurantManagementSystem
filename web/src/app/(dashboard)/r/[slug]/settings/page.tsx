@@ -10,6 +10,7 @@ import { isBillingConfigured } from '@/server/stripe';
 import { isUploadConfigured } from '@/server/storage';
 import { BillingPanel } from './billing-panel';
 import { BrandingForm } from './branding-form';
+import { LoyaltyForm } from './loyalty-form';
 import { PromoManager } from './promo-manager';
 
 export default async function SettingsPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -63,6 +64,17 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
         }))}
         uploadConfigured={isUploadConfigured()}
       />
+
+      <div className="mt-6">
+        <LoyaltyForm
+          slug={slug}
+          config={{
+            loyaltyEnabled: restaurant.loyaltyEnabled,
+            pointsPerDollar: restaurant.pointsPerDollar,
+            redeemValuePerPoint: Number(restaurant.redeemValuePerPoint),
+          }}
+        />
+      </div>
 
       <div className="mt-6">
         <PromoManager

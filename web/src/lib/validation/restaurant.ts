@@ -46,3 +46,13 @@ export const dayHoursSchema = z.object({
 export const hoursSchema = z.array(dayHoursSchema).length(7, 'Provide all seven days.');
 
 export type HoursInput = z.infer<typeof hoursSchema>;
+
+/** Loyalty-program settings. Points per dollar is a whole number; redemption value
+ *  is dollars per point (e.g. 0.01 = 1¢). */
+export const loyaltySchema = z.object({
+  loyaltyEnabled: z.coerce.boolean(),
+  pointsPerDollar: z.coerce.number().int().min(1).max(1000),
+  redeemValuePerPoint: z.coerce.number().min(0).max(100),
+});
+
+export type LoyaltyInput = z.infer<typeof loyaltySchema>;

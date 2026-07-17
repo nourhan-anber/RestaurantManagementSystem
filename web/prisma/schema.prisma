@@ -110,6 +110,9 @@ model Restaurant {
   taxRegion             String?  @map("tax_region")
   storefrontTemplate    String   @default("classic") @map("storefront_template")
   themeColor            String   @default("#d8622d") @map("theme_color")
+  loyaltyEnabled        Boolean  @default(false) @map("loyalty_enabled")
+  pointsPerDollar       Int      @default(1) @map("points_per_dollar")
+  redeemValuePerPoint   Decimal  @default(0.01) @db.Decimal(10, 4) @map("redeem_value_per_point")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -134,15 +137,32 @@ model Customer {
   name         String?
   phone        String? // normalized E.164
   email        String?
+  points       Int      @default(0)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  orders     Order[]
+  restaurant   Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  pointsLedger PointsLedger[]
 
   @@index([restaurantId, phone])
   @@index([restaurantId, email])
   @@map("customers")
+}
+
+model PointsLedger {
+  id           Int      @id @default(autoincrement())
+  restaurantId Int      @map("restaurant_id")
+  customerId   Int      @map("customer_id")
+  orderId      Int?     @unique @map("order_id")
+  delta        Int
+  reason       String
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId])
+  @@map("points_ledger")
 }
 
 model OpeningHours {

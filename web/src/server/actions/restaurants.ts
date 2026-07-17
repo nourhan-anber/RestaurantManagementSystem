@@ -4,10 +4,11 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { requireAbility, requirePlatformAdmin } from '@/server/tenant';
-import { brandingSchema, createRestaurantSchema, hoursSchema } from '@/lib/validation/restaurant';
+import { brandingSchema, createRestaurantSchema, hoursSchema, loyaltySchema } from '@/lib/validation/restaurant';
 import {
   provisionRestaurant,
   setOpeningHours,
+  updateLoyaltyConfig,
   updateRestaurantBranding,
 } from '@/server/services/restaurants';
 import { hhmmToMinutes } from '@/lib/hours';
@@ -91,6 +92,31 @@ export async function updateBranding(
 
   await updateRestaurantBranding(db, restaurantId, branding.data);
   await setOpeningHours(db, restaurantId, hours.data);
+  revalidatePath(`/r/${slug}/settings`);
+  return { ok: true };
+}
+
+export interface LoyaltyState {
+  error?: string;
+  ok?: boolean;
+}
+
+/** Update the loyalty-program configuration (gated on settings:write). */
+export async function updateLoyalty(
+  slug: string,
+  _prev: LoyaltyState,
+  formData: FormData,
+): Promise<LoyaltyState> {
+  const { restaurantId } = await requireAbility(slug, 'settings:write');
+
+  const parsed = loyaltySchema.safeParse({
+    loyaltyEnabled: formData.get('loyaltyEnabled') === 'on',
+    pointsPerDollar: formData.get('pointsPerDollar'),
+    redeemValuePerPoint: formData.get('redeemValuePerPoint'),
+  });
+  if (!parsed.success) return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };
+
+  await updateLoyaltyConfig(db, restaurantId, parsed.data);
   revalidatePath(`/r/${slug}/settings`);
   return { ok: true };
 }

@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { db } from '@/server/db';
 import { requireAbility } from '@/server/tenant';
 import { advanceOrderStatus, cancelOrder, settleBill } from '@/server/services/orders';
+import { awardLoyaltyForOrder } from '@/server/services/loyalty';
 import { isOrderStatus } from '@/lib/orders';
 import { settleBillSchema } from '@/lib/validation/payment';
 
@@ -11,6 +12,8 @@ export async function advanceOrder(slug: string, orderId: number, status: string
   const { restaurantId } = await requireAbility(slug, 'order:advance');
   if (!isOrderStatus(status)) return;
   await advanceOrderStatus(db, restaurantId, orderId, status);
+  // Reaching DELIVERED completes the order — award loyalty points (idempotent).
+  if (status === 'DELIVERED') await awardLoyaltyForOrder(db, restaurantId, orderId);
   revalidatePath(`/r/${slug}/kitchen`);
   revalidatePath(`/r/${slug}/floor`);
 }
@@ -55,5 +58,7 @@ export async function settleTableBill(
   const result = await settleBill(db, restaurantId, tableId, parsed.data);
   revalidatePath(`/r/${slug}/floor`);
   if (!result.ok) return { error: 'This table has no open orders.' };
+  // Settled orders are now DELIVERED — award loyalty points for each (idempotent).
+  for (const id of result.orderIds) await awardLoyaltyForOrder(db, restaurantId, id);
   return { ok: true };
 }

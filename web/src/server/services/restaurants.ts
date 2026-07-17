@@ -76,6 +76,24 @@ export function updateRestaurantBranding(
   });
 }
 
+export interface LoyaltyConfigInput {
+  loyaltyEnabled: boolean;
+  pointsPerDollar: number;
+  redeemValuePerPoint: number;
+}
+
+/** Update a restaurant's loyalty-program configuration. */
+export function updateLoyaltyConfig(db: PrismaClient, restaurantId: number, input: LoyaltyConfigInput) {
+  return db.restaurant.update({
+    where: { id: restaurantId },
+    data: {
+      loyaltyEnabled: input.loyaltyEnabled,
+      pointsPerDollar: input.pointsPerDollar,
+      redeemValuePerPoint: input.redeemValuePerPoint,
+    },
+  });
+}
+
 /** Replace the whole week of hours atomically (one row per day). */
 export async function setOpeningHours(db: PrismaClient, restaurantId: number, rows: HoursInput) {
   await db.$transaction([
