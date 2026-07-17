@@ -4,7 +4,11 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { getOrderDetail } from '@/server/services/orders';
+import { cancelOrderAction } from '@/server/actions/orders';
+import { isTerminal } from '@/lib/orders';
 import { formatMoney } from '@/lib/format';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 
 const TYPE_LABEL: Record<string, string> = { DINE_IN: 'Dine-in', PICKUP: 'Pickup', DELIVERY: 'Delivery' };
 const METHOD_LABEL: Record<string, string> = { CASH: 'Cash', CARD: 'Card', ONLINE: 'Online', OTHER: 'Other' };
@@ -49,6 +53,20 @@ export default async function OrderDetailPage({
         {order.table ? ` · Table ${order.table.number}` : ''} · placed {dateTime(order.createdAt)}
         {order.requestedTime ? ` · ⏰ scheduled for ${dateTime(order.requestedTime)}` : ''}
       </p>
+
+      {order.status === 'CANCELLED' && order.cancelReason ? (
+        <p className="mt-2 text-sm text-ember-600">Cancelled: {order.cancelReason}</p>
+      ) : null}
+
+      {can(membership.role, 'order:advance') && !isTerminal(order.status) ? (
+        <details className="mt-3">
+          <summary className="cursor-pointer text-sm text-ember-600">Cancel this order</summary>
+          <form action={cancelOrderAction.bind(null, slug, order.id)} className="mt-2 flex gap-2">
+            <Input name="reason" placeholder="Reason (optional)" className="max-w-xs" />
+            <Button type="submit" variant="ghost" className="text-ember-600">Confirm cancel</Button>
+          </form>
+        </details>
+      ) : null}
 
       {/* Customer */}
       {contactName || contactPhone || contactEmail ? (

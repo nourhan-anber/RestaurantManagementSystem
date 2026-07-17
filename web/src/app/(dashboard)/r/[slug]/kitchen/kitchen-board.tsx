@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { nextKitchenStatus } from '@/lib/orders';
-import { advanceOrder } from '@/server/actions/orders';
+import { advanceOrder, cancelOrderAction } from '@/server/actions/orders';
 
 export interface KdsItem {
   id: number;
@@ -78,6 +78,16 @@ export function KitchenBoard({ slug, initialOrders }: { slug: string; initialOrd
     }
   }
 
+  async function cancel(order: KdsOrder) {
+    setBusy(order.id);
+    try {
+      await cancelOrderAction(slug, order.id, new FormData());
+      await qc.invalidateQueries({ queryKey: ['kds', slug] });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   return (
     <div>
       <div className="flex items-center justify-between">
@@ -133,14 +143,14 @@ export function KitchenBoard({ slug, initialOrders }: { slug: string; initialOrd
                       ))}
                     </ul>
                     {o.notes ? <p className="mt-2 text-xs text-muted">Note: {o.notes}</p> : null}
-                    <Button
-                      size="sm"
-                      className="mt-3 w-full"
-                      disabled={busy === o.id}
-                      onClick={() => advance(o)}
-                    >
-                      {busy === o.id ? '…' : col.cta}
-                    </Button>
+                    <div className="mt-3 flex items-center gap-2">
+                      <Button size="sm" className="flex-1" disabled={busy === o.id} onClick={() => advance(o)}>
+                        {busy === o.id ? '…' : col.cta}
+                      </Button>
+                      <Button size="sm" variant="ghost" className="text-ember-600" disabled={busy === o.id} onClick={() => cancel(o)}>
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>

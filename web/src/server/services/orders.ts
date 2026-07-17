@@ -134,14 +134,14 @@ export async function listOrders(
 }
 
 export type SettleResult =
-  | { ok: true; paymentId: string; amount: number }
+  | { ok: true; amount: number; orderCount: number }
   | { ok: false; reason: 'empty' };
 
 /**
  * Settle a table's bill in one transaction: mark its active orders delivered
- * (the trigger reopens the table) and record a Payment (method + optional
- * transaction id, amount = sum of the settled orders' totals). Re-settling an
- * already-empty table records nothing.
+ * (the trigger reopens the table) and record **one Payment per order** so each
+ * order links to its payment (the order-detail page reads `order.payments`).
+ * Re-settling an already-empty table records nothing.
  */
 export async function settleBill(
   db: PrismaClient,
@@ -152,31 +152,50 @@ export async function settleBill(
   return db.$transaction(async (tx) => {
     const active = await tx.order.findMany({
       where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] } },
-      select: { total: true, taxAmount: true },
+      select: { id: true, total: true, taxAmount: true },
     });
     if (active.length === 0) return { ok: false, reason: 'empty' };
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const amount = round2(active.reduce((sum, o) => sum + Number(o.total), 0));
-    const taxAmount = round2(active.reduce((sum, o) => sum + Number(o.taxAmount), 0));
 
     await tx.order.updateMany({
       where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] } },
       data: { status: 'DELIVERED' },
     });
-    const payment = await tx.payment.create({
-      data: {
+    await tx.payment.createMany({
+      data: active.map((o) => ({
         restaurantId,
         tableId,
-        amount,
-        taxAmount,
+        orderId: o.id,
+        amount: o.total,
+        taxAmount: o.taxAmount,
         currency: 'usd',
         method: input.method,
         transactionId: input.transactionId ?? null,
-        status: 'SUCCEEDED',
-      },
+        status: 'SUCCEEDED' as const,
+      })),
     });
-    return { ok: true, paymentId: payment.id, amount };
+    return { ok: true, amount, orderCount: active.length };
   });
+}
+
+export type CancelResult = { ok: true } | { ok: false; reason: 'not_found' | 'already_terminal' };
+
+/** Cancel an active order → CANCELLED (the DB trigger reopens its table). Tenant-scoped. */
+export async function cancelOrder(
+  db: PrismaClient,
+  restaurantId: number,
+  orderId: number,
+  reason?: string,
+): Promise<CancelResult> {
+  const order = await db.order.findFirst({ where: { id: orderId, restaurantId }, select: { status: true } });
+  if (!order) return { ok: false, reason: 'not_found' };
+  if (TERMINAL_STATUSES.includes(order.status)) return { ok: false, reason: 'already_terminal' };
+  await db.order.update({
+    where: { id: orderId },
+    data: { status: 'CANCELLED', cancelReason: reason?.trim() || null },
+  });
+  return { ok: true };
 }
 
 // ─────────────────────── Order placement ───────────────────────

@@ -3,6 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
 import {
   advanceOrderStatus,
+  cancelOrder,
   listKitchenOrders,
   listOrders,
   placeOnlineOrder,
@@ -74,20 +75,21 @@ describe('orders service', () => {
     expect((await advanceOrderStatus(db, r.id, placed2.orderId, 'PREPARING')).count).toBe(1);
 
     const settled = await settleBill(db, r.id, table.id, { method: 'CARD', transactionId: 'auth_9' });
-    expect(settled).toMatchObject({ ok: true, amount: 30 });
+    expect(settled).toMatchObject({ ok: true, amount: 30, orderCount: 2 });
 
-    const payment = await db.payment.findFirstOrThrow({ where: { restaurantId: r.id } });
-    expect(payment.method).toBe('CARD');
-    expect(payment.transactionId).toBe('auth_9');
-    expect(Number(payment.amount)).toBe(30);
-    expect(payment.tableId).toBe(table.id);
+    // One Payment per settled order, each linked to its order, summing to the bill.
+    const payments = await db.payment.findMany({ where: { restaurantId: r.id } });
+    expect(payments).toHaveLength(2);
+    expect(payments.every((p) => p.method === 'CARD' && p.transactionId === 'auth_9' && p.status === 'SUCCEEDED')).toBe(true);
+    expect(payments.every((p) => p.orderId != null && p.tableId === table.id)).toBe(true);
+    expect(payments.reduce((sum, p) => sum + Number(p.amount), 0)).toBe(30);
 
     expect((await db.table.findUniqueOrThrow({ where: { id: table.id } })).status).toBe('OPEN');
     expect(await listKitchenOrders(db, r.id)).toHaveLength(0);
 
     // Re-settling an empty table records nothing.
     expect(await settleBill(db, r.id, table.id, { method: 'CASH' })).toEqual({ ok: false, reason: 'empty' });
-    expect(await db.payment.count({ where: { restaurantId: r.id } })).toBe(1);
+    expect(await db.payment.count({ where: { restaurantId: r.id } })).toBe(2);
   });
 
   it('places tableless online orders without touching table status', async () => {
@@ -247,11 +249,44 @@ describe('order tax', () => {
     await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]); // 10 + 1.30
 
     const settled = await settleBill(db, r.id, table.id, { method: 'CASH' });
-    expect(settled).toMatchObject({ ok: true, amount: 33.9 });
+    expect(settled).toMatchObject({ ok: true, amount: 33.9, orderCount: 2 });
 
-    const payment = await db.payment.findFirstOrThrow({ where: { restaurantId: r.id } });
-    expect(Number(payment.amount)).toBe(33.9);
-    expect(Number(payment.taxAmount)).toBe(3.9);
+    // Per-order payments carry that order's own amount + tax; together they sum to the bill.
+    const payments = await db.payment.findMany({ where: { restaurantId: r.id } });
+    expect(payments).toHaveLength(2);
+    expect(payments.every((p) => p.orderId != null)).toBe(true);
+    expect(payments.reduce((sum, p) => sum + Number(p.amount), 0)).toBeCloseTo(33.9, 2);
+    expect(payments.reduce((sum, p) => sum + Number(p.taxAmount), 0)).toBeCloseTo(3.9, 2);
+  });
+});
+
+describe('cancelOrder', () => {
+  it('cancels an open order, reopens the table, and drops it off the KDS', async () => {
+    const { r, table, item } = await fixture();
+    const placed = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
+    if (!placed.ok) throw new Error('expected ok');
+    expect((await db.table.findUniqueOrThrow({ where: { id: table.id } })).status).toBe('OCCUPIED');
+
+    expect(await cancelOrder(db, r.id, placed.orderId, '  86 the dish  ')).toEqual({ ok: true });
+
+    const order = await db.order.findUniqueOrThrow({ where: { id: placed.orderId } });
+    expect(order.status).toBe('CANCELLED');
+    expect(order.cancelReason).toBe('86 the dish');
+    // Trigger reopens the table once no active orders remain.
+    expect((await db.table.findUniqueOrThrow({ where: { id: table.id } })).status).toBe('OPEN');
+    expect(await listKitchenOrders(db, r.id)).toHaveLength(0);
+  });
+
+  it('is tenant-scoped and refuses to cancel a terminal order', async () => {
+    const { r, table, item } = await fixture();
+    const placed = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
+    if (!placed.ok) throw new Error('expected ok');
+
+    expect(await cancelOrder(db, 9999, placed.orderId)).toEqual({ ok: false, reason: 'not_found' });
+
+    expect(await cancelOrder(db, r.id, placed.orderId)).toEqual({ ok: true });
+    // Second cancel hits an already-terminal order.
+    expect(await cancelOrder(db, r.id, placed.orderId)).toEqual({ ok: false, reason: 'already_terminal' });
   });
 });
 
