@@ -5,6 +5,7 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import {
+  refundsTotal,
   revenueRows,
   salesByPaymentMethod,
   salesByType,
@@ -50,13 +51,14 @@ export default async function ReportsPage({
   const toStr = to ?? dayString(now);
   const range = parseDateRange(fromStr, toStr);
 
-  const [summary, rows, byType, byMethod, top, customers] = await Promise.all([
+  const [summary, rows, byType, byMethod, top, customers, refunds] = await Promise.all([
     salesSummary(db, restaurant.id, range),
     revenueRows(db, restaurant.id, range),
     salesByType(db, restaurant.id, range),
     salesByPaymentMethod(db, restaurant.id, range),
     topItemsAndCategories(db, restaurant.id, range),
     topCustomers(db, restaurant.id, range),
+    refundsTotal(db, restaurant.id, range),
   ]);
 
   const byDay = bucketRevenueByDay(rows, restaurant.timezone);
@@ -68,6 +70,7 @@ export default async function ReportsPage({
     { label: 'Orders', value: String(summary.orders) },
     { label: 'Avg order', value: formatMoney(summary.avgOrder) },
     { label: 'Items sold', value: String(summary.itemsSold) },
+    ...(refunds > 0 ? [{ label: 'Refunds', value: formatMoney(refunds) }] : []),
   ];
 
   return (
@@ -141,11 +144,11 @@ export default async function ReportsPage({
           />
         </Section>
 
-        {/* By payment method */}
+        {/* By payment method (net of refunds) */}
         <Section title="Payments collected">
           <BreakdownTable
-            head={['Method', 'Count', 'Amount']}
-            rows={byMethod.map((m) => [METHOD_LABEL[m.method] ?? m.method, String(m.count), formatMoney(m.amount)])}
+            head={['Method', 'Count', 'Net']}
+            rows={byMethod.map((m) => [METHOD_LABEL[m.method] ?? m.method, String(m.count), formatMoney(m.net)])}
             empty="No payments recorded."
           />
         </Section>

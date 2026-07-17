@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
 import { placeOnlineOrder } from './orders';
-import { recordOnlinePayment } from './payments';
+import { recordOnlinePayment, refundPayment } from './payments';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const db = new PrismaClient({ adapter });
@@ -143,5 +143,64 @@ describe('recordOnlinePayment', () => {
         currency: 'usd',
       }),
     ).toEqual({ ok: false, reason: 'order_not_found' });
+  });
+});
+
+describe('refundPayment', () => {
+  // Stripe is unconfigured under test, so every refund is a manual/cash void.
+  async function paidOrder(amountCents = 2000) {
+    const { r, item } = await fixture();
+    const placed = await placeOnlineOrder(
+      db,
+      r.id,
+      { kind: 'pickup', customerName: 'Sam', customerPhone: '555-0100' },
+      [{ menuItemId: item.id, quantity: 2 }],
+    );
+    if (!placed.ok) throw new Error('expected ok');
+    await recordOnlinePayment(db, {
+      orderId: placed.orderId,
+      stripePaymentIntentId: 'pi_ref',
+      amountCents,
+      currency: 'usd',
+    });
+    const payment = await db.payment.findFirstOrThrow({ where: { orderId: placed.orderId } });
+    return { r, payment };
+  }
+
+  it('fully refunds a payment and flips its status to REFUNDED', async () => {
+    const { r, payment } = await paidOrder();
+    const res = await refundPayment(db, r.id, payment.id, { reason: 'kitchen error' });
+    expect(res).toMatchObject({ ok: true, refundAmount: 20, refundedTotal: 20, fullyRefunded: true, mode: 'manual' });
+
+    const after = await db.payment.findUniqueOrThrow({ where: { id: payment.id } });
+    expect(Number(after.refundedAmount)).toBe(20);
+    expect(after.status).toBe('REFUNDED');
+    expect(after.refundReason).toBe('kitchen error');
+    expect(after.refundedAt).not.toBeNull();
+  });
+
+  it('accumulates partial refunds and only flips status once fully refunded', async () => {
+    const { r, payment } = await paidOrder();
+
+    const first = await refundPayment(db, r.id, payment.id, { amount: 5 });
+    expect(first).toMatchObject({ ok: true, refundAmount: 5, refundedTotal: 5, fullyRefunded: false });
+    expect((await db.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe('SUCCEEDED');
+
+    const second = await refundPayment(db, r.id, payment.id); // remaining 15
+    expect(second).toMatchObject({ ok: true, refundAmount: 15, refundedTotal: 20, fullyRefunded: true });
+    expect((await db.payment.findUniqueOrThrow({ where: { id: payment.id } })).status).toBe('REFUNDED');
+  });
+
+  it('rejects over-refunding and a fully-refunded payment', async () => {
+    const { r, payment } = await paidOrder();
+    expect(await refundPayment(db, r.id, payment.id, { amount: 25 })).toEqual({ ok: false, reason: 'exceeds_remaining' });
+
+    await refundPayment(db, r.id, payment.id); // full
+    expect(await refundPayment(db, r.id, payment.id)).toEqual({ ok: false, reason: 'nothing_left' });
+  });
+
+  it('is tenant-scoped', async () => {
+    const { payment } = await paidOrder();
+    expect(await refundPayment(db, 9999, payment.id)).toEqual({ ok: false, reason: 'not_found' });
   });
 });

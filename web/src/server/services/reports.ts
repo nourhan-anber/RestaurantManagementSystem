@@ -108,11 +108,19 @@ export async function salesByType(
 export interface MethodBreakdown {
   method: PaymentMethod;
   count: number;
-  amount: number;
+  amount: number; // gross collected
+  refunded: number;
+  net: number; // amount − refunded
   tax: number;
 }
 
-/** Payments collected (settlement-time) split by method — SUCCEEDED only. */
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * Payments collected (settlement-time) split by method, net of refunds. Includes
+ * both SUCCEEDED and REFUNDED rows so a fully-refunded payment still nets to zero
+ * rather than vanishing from the breakdown.
+ */
 export async function salesByPaymentMethod(
   db: PrismaClient,
   restaurantId: number,
@@ -120,18 +128,37 @@ export async function salesByPaymentMethod(
 ): Promise<MethodBreakdown[]> {
   const grouped = await db.payment.groupBy({
     by: ['method'],
-    where: { restaurantId, status: 'SUCCEEDED', ...createdAtFilter(range) },
-    _sum: { amount: true, taxAmount: true },
+    where: { restaurantId, status: { in: ['SUCCEEDED', 'REFUNDED'] }, ...createdAtFilter(range) },
+    _sum: { amount: true, taxAmount: true, refundedAmount: true },
     _count: { _all: true },
   });
   return grouped
-    .map((g) => ({
-      method: g.method,
-      count: g._count._all,
-      amount: Number(g._sum.amount ?? 0),
-      tax: Number(g._sum.taxAmount ?? 0),
-    }))
-    .sort((a, b) => b.amount - a.amount);
+    .map((g) => {
+      const amount = Number(g._sum.amount ?? 0);
+      const refunded = Number(g._sum.refundedAmount ?? 0);
+      return {
+        method: g.method,
+        count: g._count._all,
+        amount,
+        refunded,
+        net: round2(amount - refunded),
+        tax: Number(g._sum.taxAmount ?? 0),
+      };
+    })
+    .sort((a, b) => b.net - a.net);
+}
+
+/** Total refunded (settlement-time) in the range — for a "Refunds" reporting line. */
+export async function refundsTotal(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+): Promise<number> {
+  const agg = await db.payment.aggregate({
+    where: { restaurantId, ...createdAtFilter(range) },
+    _sum: { refundedAmount: true },
+  });
+  return Number(agg._sum.refundedAmount ?? 0);
 }
 
 /** Revenue-ranked top menu items and categories over delivered orders in the range. */

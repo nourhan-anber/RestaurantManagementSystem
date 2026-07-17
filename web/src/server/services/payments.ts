@@ -1,5 +1,7 @@
 import type { PrismaClient } from '@/generated/prisma/client';
 import { dispatchDelivery } from './deliveries';
+import { gatewayRefund } from '@/server/refunds';
+import { planRefund } from '@/lib/refund';
 
 export type OnlinePaymentResult =
   | { ok: true; paymentId: string; duplicate: boolean }
@@ -44,4 +46,56 @@ export async function recordOnlinePayment(
   }
 
   return { ok: true, paymentId: payment.id, duplicate: false };
+}
+
+export type RefundResult =
+  | { ok: true; refundAmount: number; refundedTotal: number; fullyRefunded: boolean; mode: 'stripe' | 'manual' }
+  | { ok: false; reason: 'not_found' | 'nothing_left' | 'invalid_amount' | 'exceeds_remaining' };
+
+/**
+ * Refund a payment (fully when `amount` is omitted, otherwise the partial amount),
+ * tenant-scoped. Routes through Stripe when configured + a PaymentIntent is present,
+ * else records a manual/cash void. Accumulates `refundedAmount`; flips status to
+ * REFUNDED once fully refunded. `reason` is stored for the audit trail.
+ */
+export async function refundPayment(
+  db: PrismaClient,
+  restaurantId: number,
+  paymentId: string,
+  input: { amount?: number; reason?: string } = {},
+): Promise<RefundResult> {
+  const payment = await db.payment.findFirst({
+    where: { id: paymentId, restaurantId },
+    select: { id: true, amount: true, refundedAmount: true, stripePaymentIntentId: true },
+  });
+  if (!payment) return { ok: false, reason: 'not_found' };
+
+  const plan = planRefund(
+    { amount: Number(payment.amount), refundedAmount: Number(payment.refundedAmount) },
+    input.amount,
+  );
+  if (!plan.ok) return plan;
+
+  const { mode } = await gatewayRefund({
+    stripePaymentIntentId: payment.stripePaymentIntentId,
+    amount: plan.refundAmount,
+  });
+
+  await db.payment.update({
+    where: { id: payment.id },
+    data: {
+      refundedAmount: plan.refundedTotal,
+      refundReason: input.reason?.trim() || null,
+      refundedAt: new Date(),
+      ...(plan.fullyRefunded ? { status: 'REFUNDED' as const } : {}),
+    },
+  });
+
+  return {
+    ok: true,
+    refundAmount: plan.refundAmount,
+    refundedTotal: plan.refundedTotal,
+    fullyRefunded: plan.fullyRefunded,
+    mode,
+  };
 }

@@ -36,6 +36,7 @@ export default defineConfig({
         'src/server/checkout.ts',
         'src/server/storage.ts',
         'src/server/delivery.ts',
+        'src/server/refunds.ts',
         'src/server/actions/**',
         'src/server/services/**',
       ],

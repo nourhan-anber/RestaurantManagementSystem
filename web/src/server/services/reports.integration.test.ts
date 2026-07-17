@@ -2,8 +2,10 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
 import { placeOnlineOrder, placeOrder } from './orders';
+import { refundPayment } from './payments';
 import {
   customerExportRows,
+  refundsTotal,
   revenueRows,
   salesByPaymentMethod,
   salesByType,
@@ -153,6 +155,18 @@ describe('reports breakdowns + range', () => {
     ]);
 
     expect(await revenueRows(db, r.id)).toHaveLength(3);
+  });
+
+  it('nets refunds out of the payment-method breakdown and totals them', async () => {
+    const { r } = await scenario();
+    const card = await db.payment.findFirstOrThrow({ where: { restaurantId: r.id, method: 'CARD' } });
+    expect((await refundPayment(db, r.id, card.id, { amount: 5 })).ok).toBe(true);
+
+    const byMethod = await salesByPaymentMethod(db, r.id);
+    expect(byMethod.find((m) => m.method === 'CARD')).toMatchObject({ amount: 15, refunded: 5, net: 10 });
+    expect(byMethod.find((m) => m.method === 'CASH')).toMatchObject({ amount: 20, refunded: 0, net: 20 });
+
+    expect(await refundsTotal(db, r.id)).toBe(5);
   });
 
   it('honors the date range', async () => {

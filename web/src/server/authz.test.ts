@@ -7,14 +7,20 @@ const chef: SessionMembership = { restaurantId: 2, restaurantSlug: 'nonna', role
 
 describe('can', () => {
   it('grants the owner every ability', () => {
-    for (const action of ['menu:write', 'table:write', 'order:advance', 'staff:manage', 'reports:view', 'settings:write'] as const) {
+    for (const action of ['menu:write', 'table:write', 'order:advance', 'staff:manage', 'reports:view', 'payment:refund', 'settings:write'] as const) {
       expect(can('OWNER', action)).toBe(true);
     }
   });
 
-  it('denies the manager settings/billing', () => {
+  it('denies the manager settings/billing but allows refunds', () => {
     expect(can('MANAGER', 'settings:write')).toBe(false);
     expect(can('MANAGER', 'menu:write')).toBe(true);
+    expect(can('MANAGER', 'payment:refund')).toBe(true);
+  });
+
+  it('denies floor/kitchen roles the refund ability', () => {
+    expect(can('CHEF', 'payment:refund')).toBe(false);
+    expect(can('SERVER', 'payment:refund')).toBe(false);
   });
 
   it('limits the chef to advancing orders', () => {

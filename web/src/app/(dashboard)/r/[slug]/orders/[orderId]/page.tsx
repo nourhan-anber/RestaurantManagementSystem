@@ -9,6 +9,7 @@ import { isTerminal } from '@/lib/orders';
 import { formatMoney } from '@/lib/format';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { RefundForm } from './refund-form';
 
 const TYPE_LABEL: Record<string, string> = { DINE_IN: 'Dine-in', PICKUP: 'Pickup', DELIVERY: 'Delivery' };
 const METHOD_LABEL: Record<string, string> = { CASH: 'Cash', CARD: 'Card', ONLINE: 'Online', OTHER: 'Other' };
@@ -147,16 +148,31 @@ export default async function OrderDetailPage({
       {order.payments.length > 0 ? (
         <section className="mt-6 rounded-[var(--radius)] border border-border bg-surface p-5 text-sm">
           <h2 className="text-xs font-medium uppercase tracking-wide text-muted">Payments</h2>
-          <ul className="mt-2 space-y-1">
-            {order.payments.map((p) => (
-              <li key={p.id} className="flex justify-between">
-                <span className="text-muted">
-                  {METHOD_LABEL[p.method] ?? p.method} · {p.status.toLowerCase()}
-                  {p.transactionId ? ` · ${p.transactionId}` : ''}
-                </span>
-                <span className="tabular-nums text-foreground">{formatMoney(Number(p.amount))}</span>
-              </li>
-            ))}
+          <ul className="mt-2 space-y-3">
+            {order.payments.map((p) => {
+              const refunded = Number(p.refundedAmount);
+              const remaining = Math.round((Number(p.amount) - refunded) * 100) / 100;
+              return (
+                <li key={p.id}>
+                  <div className="flex justify-between">
+                    <span className="text-muted">
+                      {METHOD_LABEL[p.method] ?? p.method} · {p.status.toLowerCase()}
+                      {p.transactionId ? ` · ${p.transactionId}` : ''}
+                    </span>
+                    <span className="tabular-nums text-foreground">{formatMoney(Number(p.amount))}</span>
+                  </div>
+                  {refunded > 0 ? (
+                    <p className="text-xs text-ember-600">
+                      Refunded {formatMoney(refunded)}
+                      {p.refundReason ? ` · ${p.refundReason}` : ''}
+                    </p>
+                  ) : null}
+                  {can(membership.role, 'payment:refund') && remaining > 0 ? (
+                    <RefundForm slug={slug} paymentId={p.id} orderId={order.id} remaining={remaining} />
+                  ) : null}
+                </li>
+              );
+            })}
           </ul>
         </section>
       ) : (

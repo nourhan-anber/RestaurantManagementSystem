@@ -8,13 +8,14 @@ export type Action =
   | 'order:advance'
   | 'staff:manage'
   | 'reports:view'
+  | 'payment:refund'
   | 'settings:write';
 
 /** Role → allowed abilities. Owner is the superset; manager loses billing/settings;
  *  chef works the pass; server works the floor. */
 const MATRIX: Record<Role, readonly Action[]> = {
-  OWNER: ['menu:write', 'table:write', 'order:advance', 'staff:manage', 'reports:view', 'settings:write'],
-  MANAGER: ['menu:write', 'table:write', 'order:advance', 'staff:manage', 'reports:view'],
+  OWNER: ['menu:write', 'table:write', 'order:advance', 'staff:manage', 'reports:view', 'payment:refund', 'settings:write'],
+  MANAGER: ['menu:write', 'table:write', 'order:advance', 'staff:manage', 'reports:view', 'payment:refund'],
   CHEF: ['order:advance'],
   SERVER: ['order:advance', 'table:write'],
 };
