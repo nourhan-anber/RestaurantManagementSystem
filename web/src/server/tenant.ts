@@ -3,6 +3,17 @@ import { auth } from '@/server/auth';
 import { db } from '@/server/db';
 import { authorizeAbility, findMembership, type Action } from '@/server/authz';
 import { ForbiddenError, NotFoundError, UnauthorizedError } from '@/server/errors';
+import { isBillingConfigured } from '@/server/stripe';
+import { hasDashboardAccess } from '@/lib/subscription';
+
+// Operational writes are blocked when the subscription lapses (paywall). Billing
+// (settings:write) and reads stay open so the owner can always subscribe.
+const SUBSCRIPTION_GATED: readonly Action[] = [
+  'menu:write',
+  'table:write',
+  'order:advance',
+  'staff:manage',
+];
 
 export interface TenantContext {
   restaurantId: number;
@@ -27,6 +38,16 @@ export async function requireAbility(slug: string, action: Action): Promise<Tena
 
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) throw new NotFoundError();
+
+  // Paywall operational writes when the subscription has lapsed (only when billing
+  // is actually configured, so dev/tests without Stripe are never locked out).
+  if (isBillingConfigured() && SUBSCRIPTION_GATED.includes(action)) {
+    const sub = await db.subscription.findUnique({
+      where: { restaurantId: restaurant.id },
+      select: { status: true },
+    });
+    if (!hasDashboardAccess(sub?.status ?? null, true)) throw new ForbiddenError();
+  }
 
   return {
     restaurantId: restaurant.id,

@@ -35,11 +35,15 @@ export function BillingPanel({
         </span>
       </div>
 
-      {active && renewsOn ? (
+      {status === 'TRIALING' ? (
+        <p className="mt-2 text-sm text-muted">
+          Free trial{renewsOn ? ` — first charge on ${renewsOn}` : ''}.
+        </p>
+      ) : active && renewsOn ? (
         <p className="mt-2 text-sm text-muted">Renews on {renewsOn}.</p>
       ) : (
         <p className="mt-2 text-sm text-muted">
-          Subscribe to keep your restaurant active on Mise.
+          Subscribe to keep your restaurant active on Mise — includes a 7-day free trial.
         </p>
       )}
 

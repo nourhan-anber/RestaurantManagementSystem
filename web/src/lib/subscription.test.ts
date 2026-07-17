@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  hasDashboardAccess,
   isSubscriptionActive,
   mapStripeStatus,
   subscriptionAllowsWrite,
@@ -37,6 +38,23 @@ describe('subscription gating', () => {
     for (const s of ['CANCELED', 'INACTIVE', null] as const) {
       expect(subscriptionAllowsWrite(s)).toBe(false);
     }
+  });
+});
+
+describe('hasDashboardAccess', () => {
+  it('is always open when billing is not configured (dev/tests)', () => {
+    for (const s of ['ACTIVE', 'TRIALING', 'PAST_DUE', 'CANCELED', 'INACTIVE', null] as const) {
+      expect(hasDashboardAccess(s, false)).toBe(true);
+    }
+  });
+
+  it('when configured, allows active/trialing/past-due and blocks canceled/inactive/absent', () => {
+    expect(hasDashboardAccess('ACTIVE', true)).toBe(true);
+    expect(hasDashboardAccess('TRIALING', true)).toBe(true);
+    expect(hasDashboardAccess('PAST_DUE', true)).toBe(true);
+    expect(hasDashboardAccess('CANCELED', true)).toBe(false);
+    expect(hasDashboardAccess('INACTIVE', true)).toBe(false);
+    expect(hasDashboardAccess(null, true)).toBe(false);
   });
 });
 

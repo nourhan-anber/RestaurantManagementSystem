@@ -29,6 +29,19 @@ export function subscriptionAllowsWrite(status: SubscriptionStatus | null | unde
   return isSubscriptionActive(status) || status === 'PAST_DUE';
 }
 
+/**
+ * Whether the tenant may use the dashboard. Enforcement is a no-op unless billing
+ * is configured (so dev/tests without Stripe stay fully open); when configured,
+ * access requires a subscription in good standing (active, trialing, or past-due
+ * grace). A canceled/inactive/absent subscription is paywalled.
+ */
+export function hasDashboardAccess(
+  status: SubscriptionStatus | null | undefined,
+  billingConfigured: boolean,
+): boolean {
+  return !billingConfigured || subscriptionAllowsWrite(status);
+}
+
 export function subscriptionLabel(status: SubscriptionStatus | null | undefined): string {
   switch (status) {
     case 'ACTIVE':

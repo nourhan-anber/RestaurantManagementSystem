@@ -3,7 +3,10 @@ import { notFound, redirect } from 'next/navigation';
 import { auth, signOut } from '@/server/auth';
 import { db } from '@/server/db';
 import { findMembership } from '@/server/authz';
+import { isBillingConfigured } from '@/server/stripe';
+import { hasDashboardAccess } from '@/lib/subscription';
 import { Button } from '@/components/ui/button';
+import { Paywall } from './paywall';
 
 export default async function TenantLayout({
   children,
@@ -22,6 +25,12 @@ export default async function TenantLayout({
 
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) notFound();
+
+  const subscription = await db.subscription.findUnique({
+    where: { restaurantId: restaurant.id },
+    select: { status: true },
+  });
+  const access = hasDashboardAccess(subscription?.status ?? null, isBillingConfigured());
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -49,7 +58,9 @@ export default async function TenantLayout({
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">{children}</main>
+      <main className="mx-auto w-full max-w-5xl flex-1 px-6 py-8">
+        {access ? children : <Paywall slug={slug} role={membership.role} />}
+      </main>
     </div>
   );
 }

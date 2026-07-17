@@ -26,13 +26,17 @@ export async function startCheckout(
     };
   }
 
+  const trialDays = Math.floor(Number(process.env.STRIPE_TRIAL_DAYS ?? 7));
   const session = await stripe.checkout.sessions.create({
     mode: 'subscription',
     line_items: [{ price: priceId, quantity: 1 }],
     success_url: `${base}/r/${slug}/settings?checkout=success`,
     cancel_url: `${base}/r/${slug}/settings?checkout=cancel`,
     client_reference_id: String(ctx.restaurantId),
-    subscription_data: { metadata: { restaurantId: String(ctx.restaurantId) } },
+    subscription_data: {
+      metadata: { restaurantId: String(ctx.restaurantId) },
+      ...(Number.isFinite(trialDays) && trialDays > 0 ? { trial_period_days: trialDays } : {}),
+    },
   });
 
   if (!session.url) return { error: 'Could not start checkout. Please try again.' };
