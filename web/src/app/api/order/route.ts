@@ -5,6 +5,8 @@ import { getOpeningHours } from '@/server/services/restaurants';
 import { dispatchDelivery, quoteDelivery } from '@/server/services/deliveries';
 import { createOrderCheckout } from '@/server/checkout';
 import { isOnlinePaymentConfigured } from '@/server/stripe';
+import { sendEmail } from '@/server/email';
+import { orderConfirmation } from '@/lib/email-templates';
 import { placeOnlineOrderSchema } from '@/lib/validation/order';
 import { isOpenNow } from '@/lib/hours';
 import { toCents } from '@/lib/format';
@@ -105,6 +107,19 @@ export async function POST(req: Request) {
   if (input.orderType === 'DELIVERY') {
     const dispatched = await dispatchDelivery(db, result.orderId);
     if (dispatched.ok) tracking = dispatched.trackingUrl;
+  }
+
+  // Best-effort order confirmation to the guest's email (no-op without email creds).
+  if (input.guestEmail) {
+    await sendEmail({
+      to: input.guestEmail,
+      ...orderConfirmation({
+        restaurantName: restaurant.name,
+        orderId: result.orderId,
+        orderType: input.orderType,
+        total: result.total,
+      }),
+    });
   }
 
   return NextResponse.json(

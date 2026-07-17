@@ -6,6 +6,8 @@ import { redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { requireAbility } from '@/server/tenant';
 import { requestBaseUrl } from '@/server/base-url';
+import { sendEmail } from '@/server/email';
+import { staffInvite } from '@/lib/email-templates';
 import { acceptInviteSchema, INVITABLE_ROLES, inviteStaffSchema } from '@/lib/validation/staff';
 import {
   acceptInvite,
@@ -39,7 +41,16 @@ export async function inviteStaff(
   revalidatePath(`/r/${slug}/staff`);
 
   const base = await requestBaseUrl();
-  return { inviteUrl: `${base}/accept-invite/${token}` };
+  const inviteUrl = `${base}/accept-invite/${token}`;
+
+  // Best-effort email with the accept link (the URL is also returned + shown in the UI).
+  const restaurant = await db.restaurant.findUnique({ where: { id: restaurantId }, select: { name: true } });
+  await sendEmail({
+    to: parsed.data.email,
+    ...staffInvite({ restaurantName: restaurant?.name ?? 'the team', role: parsed.data.role, acceptUrl: inviteUrl }),
+  });
+
+  return { inviteUrl };
 }
 
 export interface AcceptState {

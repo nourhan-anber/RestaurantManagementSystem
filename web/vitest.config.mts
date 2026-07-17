@@ -37,6 +37,7 @@ export default defineConfig({
         'src/server/storage.ts',
         'src/server/delivery.ts',
         'src/server/refunds.ts',
+        'src/server/email.ts',
         'src/server/actions/**',
         'src/server/services/**',
       ],
