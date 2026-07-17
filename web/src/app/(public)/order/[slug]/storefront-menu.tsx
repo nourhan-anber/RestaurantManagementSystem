@@ -9,6 +9,7 @@ import { cartCount, cartTotal, type CartLine, type CartSelectedOption } from '@/
 import { DIETARY_LABELS } from '@/lib/dietary';
 import { formatMoney } from '@/lib/format';
 import { DAY_LABELS, minutesToHhmm, type DayHours } from '@/lib/hours';
+import { computeTax } from '@/lib/tax';
 import { useCart } from '@/stores/cart';
 import { ItemCustomizer } from '../../dine/[slug]/[tableNumber]/item-customizer';
 import type { CustomerMenuItem } from '../../dine/[slug]/[tableNumber]/customer-menu';
@@ -34,6 +35,9 @@ export function StorefrontMenu({
   canDeliver,
   onlinePayment,
   paid,
+  taxEnabled,
+  taxRatePercent,
+  taxLabel,
   menu,
 }: {
   slug: string;
@@ -47,6 +51,9 @@ export function StorefrontMenu({
   canDeliver: boolean;
   onlinePayment: boolean;
   paid: boolean;
+  taxEnabled: boolean;
+  taxRatePercent: number;
+  taxLabel: string;
   menu: CustomerMenuItem[];
 }) {
   const lines = useCart((s) => s.lines);
@@ -75,7 +82,9 @@ export function StorefrontMenu({
   const count = cartCount(lines);
   const subtotal = cartTotal(lines);
   const deliveryFee = orderType === 'DELIVERY' ? (quote?.fee ?? 0) : 0;
-  const grandTotal = subtotal + deliveryFee;
+  // Tax applies to the food subtotal only (delivery fee is not taxed).
+  const { taxAmount } = computeTax(subtotal, taxRatePercent, taxEnabled);
+  const grandTotal = subtotal + taxAmount + deliveryFee;
 
   const inCart = (itemId: number) =>
     lines.filter((l) => l.menuItemId === itemId).reduce((s, l) => s + l.quantity, 0);
@@ -517,6 +526,12 @@ export function StorefrontMenu({
                     <span className="text-muted">Subtotal</span>
                     <span className="tabular-nums text-foreground">{formatMoney(subtotal)}</span>
                   </div>
+                  {taxAmount > 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted">{taxLabel}</span>
+                      <span className="tabular-nums text-foreground">{formatMoney(taxAmount)}</span>
+                    </div>
+                  ) : null}
                   {orderType === 'DELIVERY' ? (
                     <div className="flex justify-between">
                       <span className="text-muted">Delivery{quote?.etaMinutes ? ` · ~${quote.etaMinutes} min` : ''}</span>

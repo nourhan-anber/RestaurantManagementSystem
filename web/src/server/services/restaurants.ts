@@ -1,6 +1,7 @@
 import bcrypt from 'bcryptjs';
 import type { PrismaClient } from '@/generated/prisma/client';
 import { uniqueSlug } from '@/lib/slug';
+import { resolveTaxConfig } from '@/lib/tax';
 import type { BrandingInput, HoursInput } from '@/lib/validation/restaurant';
 
 export interface ProvisionRestaurantInput {
@@ -53,6 +54,7 @@ export function updateRestaurantBranding(
   restaurantId: number,
   input: BrandingInput,
 ) {
+  const tax = resolveTaxConfig(input.taxRegion, input.taxRatePercent ?? 0, input.taxLabel ?? 'Tax');
   return db.restaurant.update({
     where: { id: restaurantId },
     data: {
@@ -63,6 +65,10 @@ export function updateRestaurantBranding(
       timezone: input.timezone,
       logoUrl: input.logoUrl ?? null,
       onlineOrderingEnabled: input.onlineOrderingEnabled,
+      taxEnabled: input.taxEnabled ?? false,
+      taxRatePercent: tax.ratePercent,
+      taxLabel: tax.label,
+      taxRegion: tax.region,
     },
   });
 }

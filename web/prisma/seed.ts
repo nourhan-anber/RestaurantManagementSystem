@@ -153,6 +153,10 @@ async function main() {
     address: '12 Vine Street, New York, NY 10012',
     timezone: 'America/New_York',
     onlineOrderingEnabled: true,
+    taxEnabled: true,
+    taxRegion: 'CA-ON',
+    taxRatePercent: 13,
+    taxLabel: 'HST',
   };
   const restaurant = await db.restaurant.upsert({
     where: { slug: 'bella-vista' },

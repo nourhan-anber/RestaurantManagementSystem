@@ -7,6 +7,8 @@ export interface OrderCheckoutInput {
   restaurantId: number;
   restaurantName: string;
   subtotalCents: number;
+  taxCents?: number;
+  taxLabel?: string;
   deliveryFeeCents?: number;
   currency?: string;
 }
@@ -36,6 +38,16 @@ export async function createOrderCheckout(input: OrderCheckoutInput): Promise<{ 
       quantity: 1,
     },
   ];
+  if (input.taxCents && input.taxCents > 0) {
+    lineItems.push({
+      price_data: {
+        currency,
+        product_data: { name: input.taxLabel || 'Tax' },
+        unit_amount: input.taxCents,
+      },
+      quantity: 1,
+    });
+  }
   if (input.deliveryFeeCents && input.deliveryFeeCents > 0) {
     lineItems.push({
       price_data: {

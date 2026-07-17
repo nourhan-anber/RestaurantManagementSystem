@@ -44,6 +44,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
           timezone: restaurant.timezone,
           logoUrl: restaurant.logoUrl,
           onlineOrderingEnabled: restaurant.onlineOrderingEnabled,
+          taxEnabled: restaurant.taxEnabled,
+          taxRatePercent: Number(restaurant.taxRatePercent),
+          taxLabel: restaurant.taxLabel,
+          taxRegion: restaurant.taxRegion,
         }}
         hours={hours.map((h) => ({
           dayOfWeek: h.dayOfWeek,

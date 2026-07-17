@@ -15,7 +15,21 @@ import { settleTableBill, type SettleState } from '@/server/actions/orders';
 
 const INITIAL: SettleState = {};
 
-export function SettleBill({ slug, tableId, amount }: { slug: string; tableId: number; amount: number }) {
+export function SettleBill({
+  slug,
+  tableId,
+  amount,
+  subtotal,
+  tax,
+  taxLabel,
+}: {
+  slug: string;
+  tableId: number;
+  amount: number;
+  subtotal: number;
+  tax: number;
+  taxLabel: string;
+}) {
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<SettleMethod>('CARD');
   const [state, formAction, pending] = useActionState(
@@ -46,7 +60,24 @@ export function SettleBill({ slug, tableId, amount }: { slug: string; tableId: n
           <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={() => setOpen(false)} />
           <div className="relative w-full max-w-sm rounded-[var(--radius)] bg-background p-5 shadow-xl">
             <h2 className="font-display text-lg text-foreground">Settle bill</h2>
-            <p className="mt-1 text-sm text-muted">Total {formatMoney(amount)}</p>
+            {tax > 0 ? (
+              <div className="mt-2 space-y-1 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-muted">Subtotal</span>
+                  <span className="tabular-nums text-foreground">{formatMoney(subtotal)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-muted">{taxLabel}</span>
+                  <span className="tabular-nums text-foreground">{formatMoney(tax)}</span>
+                </div>
+                <div className="flex justify-between border-t border-border pt-1 font-medium">
+                  <span className="text-foreground">Total</span>
+                  <span className="tabular-nums text-foreground">{formatMoney(amount)}</span>
+                </div>
+              </div>
+            ) : (
+              <p className="mt-1 text-sm text-muted">Total {formatMoney(amount)}</p>
+            )}
 
             <form action={formAction} className="mt-4 space-y-4">
               <div className="space-y-1.5">

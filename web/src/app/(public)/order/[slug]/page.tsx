@@ -82,6 +82,9 @@ export default async function OrderPage({
       canDeliver={Boolean(restaurant.address)}
       onlinePayment={isOnlinePaymentConfigured()}
       paid={paid === '1'}
+      taxEnabled={restaurant.taxEnabled}
+      taxRatePercent={Number(restaurant.taxRatePercent)}
+      taxLabel={restaurant.taxLabel}
       menu={menu}
     />
   );

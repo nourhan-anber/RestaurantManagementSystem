@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DAY_LABELS, minutesToHhmm } from '@/lib/hours';
+import { CA_TAX_PRESETS, CUSTOM_TAX } from '@/lib/tax';
 import { updateBranding, type BrandingState } from '@/server/actions/restaurants';
 import { ImageUploadField } from '../menu/image-upload-field';
 
@@ -23,11 +24,17 @@ export interface BrandingData {
   timezone: string;
   logoUrl: string | null;
   onlineOrderingEnabled: boolean;
+  taxEnabled: boolean;
+  taxRatePercent: number;
+  taxLabel: string;
+  taxRegion: string | null;
 }
 
 const INITIAL: BrandingState = {};
 const textareaClass =
   'w-full rounded-[var(--radius)] border border-border bg-surface px-3.5 py-2 text-sm text-foreground focus-visible:border-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember/30';
+const selectClass =
+  'h-11 w-full rounded-[var(--radius)] border border-border bg-surface px-3 text-sm text-foreground focus-visible:border-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember/30';
 
 export function BrandingForm({
   slug,
@@ -83,6 +90,39 @@ export function BrandingForm({
             /order/{slug}
           </Link>
         </p>
+      </section>
+
+      <section className="space-y-4 rounded-[var(--radius)] border border-border bg-surface p-5">
+        <div>
+          <h2 className="font-display text-lg text-foreground">Taxes</h2>
+          <p className="mt-1 text-xs text-muted">Sales tax added on top of item prices at checkout.</p>
+        </div>
+        <label className="flex items-center gap-2 text-sm text-foreground">
+          <input type="checkbox" name="taxEnabled" defaultChecked={restaurant.taxEnabled} className="size-4 accent-[var(--color-ember)]" />
+          Charge sales tax
+        </label>
+        <div className="space-y-1.5">
+          <Label htmlFor="taxRegion">Region</Label>
+          <select id="taxRegion" name="taxRegion" defaultValue={restaurant.taxRegion ?? CUSTOM_TAX} className={selectClass}>
+            {CA_TAX_PRESETS.map((p) => (
+              <option key={p.code} value={p.code}>
+                {p.region} — {p.label} {p.ratePercent}%
+              </option>
+            ))}
+            <option value={CUSTOM_TAX}>Custom rate…</option>
+          </select>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor="taxRatePercent">Custom rate (%)</Label>
+            <Input id="taxRatePercent" name="taxRatePercent" type="number" step="0.001" min="0" defaultValue={restaurant.taxRatePercent} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="taxLabel">Custom label</Label>
+            <Input id="taxLabel" name="taxLabel" defaultValue={restaurant.taxLabel} placeholder="e.g. GST" />
+          </div>
+        </div>
+        <p className="text-xs text-muted">Pick a province, or choose <span className="font-medium">Custom rate…</span> to use the rate &amp; label above.</p>
       </section>
 
       <section className="space-y-3 rounded-[var(--radius)] border border-border bg-surface p-5">

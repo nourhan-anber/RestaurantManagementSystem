@@ -82,6 +82,9 @@ export default async function DinePage({
       slug={slug}
       tableNumber={number}
       token={token!}
+      taxEnabled={restaurant.taxEnabled}
+      taxRatePercent={Number(restaurant.taxRatePercent)}
+      taxLabel={restaurant.taxLabel}
       menu={menu}
     />
   );

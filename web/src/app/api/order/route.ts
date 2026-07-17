@@ -72,7 +72,9 @@ export async function POST(req: Request) {
       orderId: result.orderId,
       restaurantId: restaurant.id,
       restaurantName: restaurant.name,
-      subtotalCents: toCents(result.total),
+      subtotalCents: toCents(result.subtotal),
+      taxCents: toCents(result.taxAmount),
+      taxLabel: restaurant.taxLabel,
       deliveryFeeCents,
     });
     if (checkout) {

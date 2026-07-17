@@ -7,6 +7,7 @@ import { Label } from '@/components/ui/label';
 import { cartCount, cartTotal, type CartLine, type CartSelectedOption } from '@/lib/cart';
 import { DIETARY_LABELS } from '@/lib/dietary';
 import { formatMoney } from '@/lib/format';
+import { computeTax } from '@/lib/tax';
 import { useCart } from '@/stores/cart';
 import type { DietaryTag } from '@/generated/prisma/enums';
 import { ItemCustomizer } from './item-customizer';
@@ -43,12 +44,18 @@ export function CustomerMenu({
   slug,
   tableNumber,
   token,
+  taxEnabled,
+  taxRatePercent,
+  taxLabel,
   menu,
 }: {
   restaurantName: string;
   slug: string;
   tableNumber: number;
   token: string;
+  taxEnabled: boolean;
+  taxRatePercent: number;
+  taxLabel: string;
   menu: CustomerMenuItem[];
 }) {
   const lines = useCart((s) => s.lines);
@@ -67,7 +74,8 @@ export function CustomerMenu({
   const [orderNote, setOrderNote] = useState('');
 
   const count = cartCount(lines);
-  const total = cartTotal(lines);
+  const subtotal = cartTotal(lines);
+  const { taxAmount, total } = computeTax(subtotal, taxRatePercent, taxEnabled);
   const inCart = (itemId: number) =>
     lines.filter((l) => l.menuItemId === itemId).reduce((s, l) => s + l.quantity, 0);
 
@@ -277,9 +285,21 @@ export function CustomerMenu({
                   )}
                 </div>
                 <div className="space-y-3 border-t border-border px-5 py-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted">Total</span>
-                    <span className="font-medium tabular-nums text-foreground">{formatMoney(total)}</span>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted">Subtotal</span>
+                      <span className="tabular-nums text-foreground">{formatMoney(subtotal)}</span>
+                    </div>
+                    {taxAmount > 0 ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted">{taxLabel}</span>
+                        <span className="tabular-nums text-foreground">{formatMoney(taxAmount)}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between border-t border-border pt-1 font-medium">
+                      <span className="text-foreground">Total</span>
+                      <span className="tabular-nums text-foreground">{formatMoney(total)}</span>
+                    </div>
                   </div>
                   <Button className="w-full" size="lg" disabled={lines.length === 0} onClick={() => setStep('details')}>
                     Continue
@@ -313,9 +333,21 @@ export function CustomerMenu({
                   ) : null}
                 </div>
                 <div className="space-y-3 border-t border-border px-5 py-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted">Total</span>
-                    <span className="font-medium tabular-nums text-foreground">{formatMoney(total)}</span>
+                  <div className="space-y-1 text-sm">
+                    <div className="flex justify-between">
+                      <span className="text-muted">Subtotal</span>
+                      <span className="tabular-nums text-foreground">{formatMoney(subtotal)}</span>
+                    </div>
+                    {taxAmount > 0 ? (
+                      <div className="flex justify-between">
+                        <span className="text-muted">{taxLabel}</span>
+                        <span className="tabular-nums text-foreground">{formatMoney(taxAmount)}</span>
+                      </div>
+                    ) : null}
+                    <div className="flex justify-between border-t border-border pt-1 font-medium">
+                      <span className="text-foreground">Total</span>
+                      <span className="tabular-nums text-foreground">{formatMoney(total)}</span>
+                    </div>
                   </div>
                   <Button
                     className="w-full"

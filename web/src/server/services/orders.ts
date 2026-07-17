@@ -121,7 +121,7 @@ export type Fulfillment =
     };
 
 export type PlaceOrderResult =
-  | { ok: true; orderId: number; total: number }
+  | { ok: true; orderId: number; subtotal: number; taxAmount: number; total: number }
   | { ok: false; reason: 'table' | 'items' | 'fulfillment' };
 
 /**
@@ -256,7 +256,13 @@ async function placeOrderCore(
     return created;
   });
 
-  return { ok: true, orderId: order.id, total: tax.total };
+  return {
+    ok: true,
+    orderId: order.id,
+    subtotal: tax.subtotal,
+    taxAmount: tax.taxAmount,
+    total: tax.total,
+  };
 }
 
 /** Dine-in order placement (unchanged contract): the current /api/orders route + tests use this. */

@@ -50,8 +50,38 @@ describe('recordOnlinePayment', () => {
     expect(payment.method).toBe('ONLINE');
     expect(payment.status).toBe('SUCCEEDED');
     expect(Number(payment.amount)).toBe(20);
+    expect(Number(payment.taxAmount)).toBe(0);
     expect(payment.stripePaymentIntentId).toBe('pi_1');
     expect(await db.delivery.count()).toBe(0);
+  });
+
+  it('records the order tax on the online payment', async () => {
+    const r = await db.restaurant.create({
+      data: { name: 'Taxed', slug: 'taxed', taxEnabled: true, taxRatePercent: '13.0000' },
+    });
+    const cat = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'main', position: 0 } });
+    const item = await db.menuItem.create({
+      data: { restaurantId: r.id, categoryId: cat.id, name: 'Dish', price: '10.00' },
+    });
+    const placed = await placeOnlineOrder(
+      db,
+      r.id,
+      { kind: 'pickup', customerName: 'Sam', customerPhone: '555-0100' },
+      [{ menuItemId: item.id, quantity: 2 }],
+    );
+    if (!placed.ok) throw new Error('expected ok');
+    expect(placed.taxAmount).toBe(2.6);
+
+    // Stripe charged subtotal 20 + tax 2.60 = 22.60.
+    await recordOnlinePayment(db, {
+      orderId: placed.orderId,
+      stripePaymentIntentId: 'pi_tax',
+      amountCents: 2260,
+      currency: 'usd',
+    });
+    const payment = await db.payment.findFirstOrThrow({ where: { orderId: placed.orderId } });
+    expect(Number(payment.amount)).toBe(22.6);
+    expect(Number(payment.taxAmount)).toBe(2.6);
   });
 
   it('dispatches the courier for a paid delivery order', async () => {

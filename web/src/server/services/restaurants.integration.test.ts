@@ -117,4 +117,39 @@ describe('branding + opening hours', () => {
     expect(rows).toHaveLength(7);
     expect(rows.every((r) => r.opensMinutes === 600)).toBe(true);
   });
+
+  it('resolves a province preset to its rate + label (custom values ignored)', async () => {
+    const { restaurantId } = await provisionRestaurant(db, input);
+    await updateRestaurantBranding(db, restaurantId, {
+      name: 'Bella Vista',
+      timezone: 'America/Toronto',
+      onlineOrderingEnabled: false,
+      taxEnabled: true,
+      taxRegion: 'CA-ON',
+      taxRatePercent: 99, // ignored — preset wins
+      taxLabel: 'Bogus',
+    });
+    const fresh = await db.restaurant.findUniqueOrThrow({ where: { id: restaurantId } });
+    expect(fresh.taxEnabled).toBe(true);
+    expect(Number(fresh.taxRatePercent)).toBe(13);
+    expect(fresh.taxLabel).toBe('HST');
+    expect(fresh.taxRegion).toBe('CA-ON');
+  });
+
+  it('stores a custom rate + label when region is custom', async () => {
+    const { restaurantId } = await provisionRestaurant(db, input);
+    await updateRestaurantBranding(db, restaurantId, {
+      name: 'Bella Vista',
+      timezone: 'America/Toronto',
+      onlineOrderingEnabled: false,
+      taxEnabled: true,
+      taxRegion: 'custom',
+      taxRatePercent: 8.25,
+      taxLabel: 'City Tax',
+    });
+    const fresh = await db.restaurant.findUniqueOrThrow({ where: { id: restaurantId } });
+    expect(Number(fresh.taxRatePercent)).toBe(8.25);
+    expect(fresh.taxLabel).toBe('City Tax');
+    expect(fresh.taxRegion).toBe('custom');
+  });
 });

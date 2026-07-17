@@ -35,6 +35,8 @@ export default async function FloorPage({ params }: { params: Promise<{ slug: st
       <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {tables.map((t) => {
           const activeTotal = t.orders.reduce((sum, o) => sum + Number(o.total), 0);
+          const activeSubtotal = t.orders.reduce((sum, o) => sum + Number(o.subtotal), 0);
+          const activeTax = t.orders.reduce((sum, o) => sum + Number(o.taxAmount), 0);
           return (
             <div
               key={t.id}
@@ -65,7 +67,14 @@ export default async function FloorPage({ params }: { params: Promise<{ slug: st
               )}
 
               {t.orders.length > 0 ? (
-                <SettleBill slug={slug} tableId={t.id} amount={activeTotal} />
+                <SettleBill
+                  slug={slug}
+                  tableId={t.id}
+                  amount={activeTotal}
+                  subtotal={activeSubtotal}
+                  tax={activeTax}
+                  taxLabel={restaurant.taxLabel}
+                />
               ) : null}
             </div>
           );

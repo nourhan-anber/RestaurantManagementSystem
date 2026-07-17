@@ -17,6 +17,16 @@ export const brandingSchema = z.object({
   timezone: z.string().trim().min(1).max(64),
   logoUrl: z.string().trim().url('Enter a valid logo URL.').optional(),
   onlineOrderingEnabled: z.boolean(),
+  // Tax config: taxRegion selects a preset (whose rate/label win); 'custom'/blank
+  // uses taxRatePercent + taxLabel. Resolved server-side in updateRestaurantBranding.
+  taxEnabled: z.boolean().optional(),
+  taxRegion: z.string().trim().max(20).optional(),
+  taxRatePercent: z.coerce
+    .number()
+    .min(0, 'Tax rate must be 0 or more.')
+    .max(30, 'Tax rate looks too high.')
+    .optional(),
+  taxLabel: z.string().trim().max(40).optional(),
 });
 
 export type BrandingInput = z.infer<typeof brandingSchema>;

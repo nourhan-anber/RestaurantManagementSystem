@@ -24,7 +24,8 @@ export default async function ReportsPage({ params }: { params: Promise<{ slug: 
   const maxQty = top[0]?.quantity ?? 0;
 
   const tiles = [
-    { label: 'Revenue', value: formatMoney(summary.revenue) },
+    { label: 'Net revenue', value: formatMoney(summary.revenue) },
+    { label: 'Tax collected', value: formatMoney(summary.taxCollected) },
     { label: 'Orders', value: String(summary.orders) },
     { label: 'Avg order', value: formatMoney(summary.avgOrder) },
     { label: 'Items sold', value: String(summary.itemsSold) },
@@ -38,7 +39,7 @@ export default async function ReportsPage({ params }: { params: Promise<{ slug: 
       <h1 className="mt-2 font-display text-2xl tracking-tight text-foreground">Reports</h1>
       <p className="mt-1 text-sm text-muted">Based on settled (delivered) orders.</p>
 
-      <div className="mt-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {tiles.map((t) => (
           <div key={t.label} className="rounded-[var(--radius)] border border-border bg-surface p-5">
             <p className="font-display text-2xl tabular-nums text-foreground">{t.value}</p>

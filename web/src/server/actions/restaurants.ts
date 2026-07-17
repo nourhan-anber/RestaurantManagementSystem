@@ -66,6 +66,10 @@ export async function updateBranding(
     timezone: formData.get('timezone'),
     logoUrl: optional(formData.get('logoUrl')),
     onlineOrderingEnabled: formData.get('onlineOrderingEnabled') === 'on',
+    taxEnabled: formData.get('taxEnabled') === 'on',
+    taxRegion: optional(formData.get('taxRegion')),
+    taxRatePercent: formData.get('taxRatePercent') ?? undefined,
+    taxLabel: optional(formData.get('taxLabel')),
   });
   if (!branding.success) {
     return { error: branding.error.issues[0]?.message ?? 'Invalid input.' };
