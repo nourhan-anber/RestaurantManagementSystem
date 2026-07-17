@@ -32,3 +32,13 @@ export function updateMenuItem(
 export function deleteMenuItem(db: PrismaClient, restaurantId: number, id: number) {
   return db.menuItem.deleteMany({ where: { id, restaurantId } });
 }
+
+/** Quick "86" — flip an item's availability without opening the full editor. Tenant-scoped. */
+export function setItemAvailability(
+  db: PrismaClient,
+  restaurantId: number,
+  id: number,
+  isAvailable: boolean,
+) {
+  return db.menuItem.updateMany({ where: { id, restaurantId }, data: { isAvailable } });
+}

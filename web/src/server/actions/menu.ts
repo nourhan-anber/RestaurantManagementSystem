@@ -5,7 +5,12 @@ import { db } from '@/server/db';
 import { requireAbility } from '@/server/tenant';
 import { menuItemInputSchema } from '@/lib/validation/menu';
 import { categoryInputSchema } from '@/lib/validation/category';
-import { createMenuItem, deleteMenuItem, updateMenuItem } from '@/server/services/menu';
+import {
+  createMenuItem,
+  deleteMenuItem,
+  setItemAvailability,
+  updateMenuItem,
+} from '@/server/services/menu';
 import {
   categoryBelongsTo,
   createCategory,
@@ -74,6 +79,14 @@ export async function removeMenuItem(slug: string, id: number): Promise<void> {
     await db.menuItem.updateMany({ where: { id, restaurantId }, data: { isAvailable: false } });
   }
   revalidatePath(`/r/${slug}/menu`);
+}
+
+/** Quick 86 / re-enable — any operational role (chef/server) can flip availability mid-service. */
+export async function toggleItemAvailability(slug: string, id: number, isAvailable: boolean): Promise<void> {
+  const { restaurantId } = await requireAbility(slug, 'order:advance');
+  await setItemAvailability(db, restaurantId, id, isAvailable);
+  revalidatePath(`/r/${slug}/menu`);
+  revalidatePath(`/r/${slug}/kitchen`);
 }
 
 // ─────────────────────────── Categories ───────────────────────────

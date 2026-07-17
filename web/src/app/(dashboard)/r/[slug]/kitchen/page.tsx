@@ -3,7 +3,9 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { listKitchenOrders } from '@/server/services/orders';
+import { listMenu } from '@/server/services/menu';
 import { KitchenBoard, type KdsOrder } from './kitchen-board';
+import { EightySixPanel } from './eighty-six-panel';
 
 export default async function KitchenPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -15,7 +17,11 @@ export default async function KitchenPage({ params }: { params: Promise<{ slug: 
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) notFound();
 
-  const orders = await listKitchenOrders(db, restaurant.id);
+  const [orders, menu] = await Promise.all([
+    listKitchenOrders(db, restaurant.id),
+    listMenu(db, restaurant.id),
+  ]);
+  const items = menu.map((m) => ({ id: m.id, name: m.name, isAvailable: m.isAvailable }));
   const initial: KdsOrder[] = orders.map((o) => ({
     id: o.id,
     status: o.status as KdsOrder['status'],
@@ -34,5 +40,10 @@ export default async function KitchenPage({ params }: { params: Promise<{ slug: 
     })),
   }));
 
-  return <KitchenBoard slug={slug} initialOrders={initial} />;
+  return (
+    <div>
+      <EightySixPanel slug={slug} items={items} />
+      <KitchenBoard slug={slug} initialOrders={initial} />
+    </div>
+  );
 }

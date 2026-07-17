@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
-import { createMenuItem, deleteMenuItem, listMenu, updateMenuItem } from './menu';
+import { createMenuItem, deleteMenuItem, listMenu, setItemAvailability, updateMenuItem } from './menu';
 import { createTable, deleteTable, listTables, updateTable } from './tables';
 import { deleteCategory, updateCategory } from './categories';
 
@@ -53,6 +53,22 @@ describe('menu service tenant scoping', () => {
     const res = await deleteMenuItem(db, r2.id, item.id);
     expect(res.count).toBe(0);
     expect(await db.menuItem.findUnique({ where: { id: item.id } })).not.toBeNull();
+  });
+
+  it('86 toggles availability, tenant-scoped', async () => {
+    const { r1, r2, cat1 } = await twoRestaurants();
+    const item = await createMenuItem(db, r1.id, { ...menuBase, categoryId: cat1.id });
+    expect(item.isAvailable).toBe(true);
+
+    // Another tenant can't flip it.
+    expect((await setItemAvailability(db, r2.id, item.id, false)).count).toBe(0);
+    expect((await db.menuItem.findUniqueOrThrow({ where: { id: item.id } })).isAvailable).toBe(true);
+
+    // Owner 86's it, then re-enables.
+    expect((await setItemAvailability(db, r1.id, item.id, false)).count).toBe(1);
+    expect((await db.menuItem.findUniqueOrThrow({ where: { id: item.id } })).isAvailable).toBe(false);
+    await setItemAvailability(db, r1.id, item.id, true);
+    expect((await db.menuItem.findUniqueOrThrow({ where: { id: item.id } })).isAvailable).toBe(true);
   });
 });
 

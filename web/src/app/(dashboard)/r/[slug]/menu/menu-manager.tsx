@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { Button, buttonClasses } from '@/components/ui/button';
 import { formatMoney } from '@/lib/format';
-import { removeMenuItem } from '@/server/actions/menu';
+import { removeMenuItem, toggleItemAvailability } from '@/server/actions/menu';
 import type { CategoryOption, MenuRow } from './menu-item-form';
 
 export type { CategoryOption, MenuRow } from './menu-item-form';
@@ -67,6 +67,11 @@ export function MenuManager({
                     </div>
                     <div className="flex items-center gap-3">
                       <span className="tabular-nums text-sm text-foreground">{formatMoney(item.price)}</span>
+                      <form action={toggleItemAvailability.bind(null, slug, item.id, !item.isAvailable)}>
+                        <Button type="submit" size="sm" variant="ghost" className={item.isAvailable ? '' : 'text-pine dark:text-linen'}>
+                          {item.isAvailable ? '86' : 'Re-enable'}
+                        </Button>
+                      </form>
                       <Link href={`/r/${slug}/menu/${item.id}`} className={buttonClasses({ size: 'sm', variant: 'ghost' })}>
                         Edit
                       </Link>
