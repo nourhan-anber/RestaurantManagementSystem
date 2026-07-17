@@ -125,6 +125,7 @@ export function StorefrontMenu({
   const [orderNote, setOrderNote] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
+  const [statusUrl, setStatusUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
   const [tipPreset, setTipPreset] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState('');
@@ -263,6 +264,7 @@ export function StorefrontMenu({
         return;
       }
       setTrackingUrl(data.trackingUrl ?? null);
+      setStatusUrl(data.statusToken ? `/order/${slug}/status/${data.statusToken}` : null);
       clear();
       setStatus('success');
     } catch {
@@ -327,12 +329,17 @@ export function StorefrontMenu({
             Thanks{customerName.trim() ? `, ${customerName.trim()}` : ''}! We&rsquo;ve sent your{' '}
             {orderType === 'DELIVERY' ? 'delivery' : 'pickup'} order to {restaurantName}.
           </p>
+          {statusUrl ? (
+            <a href={statusUrl} className="mt-4 block text-sm font-medium text-ember underline">
+              Track your order →
+            </a>
+          ) : null}
           {trackingUrl ? (
             <a
               href={trackingUrl}
               target="_blank"
               rel="noreferrer"
-              className="mt-4 inline-block text-sm font-medium text-ember underline"
+              className="mt-2 inline-block text-sm font-medium text-ember underline"
             >
               Track your courier →
             </a>

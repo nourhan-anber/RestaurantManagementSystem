@@ -66,6 +66,25 @@ export function getOrderDetail(db: PrismaClient, restaurantId: number, orderId: 
   });
 }
 
+/** Public, PII-free order snapshot for the customer status page (resolved by token). */
+export function getPublicOrderStatus(db: PrismaClient, restaurantId: number, orderId: number) {
+  return db.order.findFirst({
+    where: { id: orderId, restaurantId },
+    select: {
+      id: true,
+      status: true,
+      orderType: true,
+      createdAt: true,
+      requestedTime: true,
+      items: {
+        orderBy: { id: 'asc' },
+        select: { quantity: true, menuItem: { select: { name: true } } },
+      },
+      delivery: { select: { status: true, trackingUrl: true, provider: true } },
+    },
+  });
+}
+
 export interface OrderListItem {
   id: number;
   createdAt: Date;

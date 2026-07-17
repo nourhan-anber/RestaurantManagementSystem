@@ -6,6 +6,8 @@ import { dispatchDelivery, quoteDelivery } from '@/server/services/deliveries';
 import { createOrderCheckout } from '@/server/checkout';
 import { isOnlinePaymentConfigured } from '@/server/stripe';
 import { sendEmail } from '@/server/email';
+import { generateOrderToken } from '@/server/order-token';
+import { requestBaseUrl } from '@/server/base-url';
 import { orderConfirmation } from '@/lib/email-templates';
 import { placeOnlineOrderSchema } from '@/lib/validation/order';
 import { isOpenNow } from '@/lib/hours';
@@ -109,8 +111,12 @@ export async function POST(req: Request) {
     if (dispatched.ok) tracking = dispatched.trackingUrl;
   }
 
+  // Unguessable, self-contained link to the public order-status page.
+  const statusToken = generateOrderToken(result.orderId);
+
   // Best-effort order confirmation to the guest's email (no-op without email creds).
   if (input.guestEmail) {
+    const base = await requestBaseUrl();
     await sendEmail({
       to: input.guestEmail,
       ...orderConfirmation({
@@ -118,12 +124,13 @@ export async function POST(req: Request) {
         orderId: result.orderId,
         orderType: input.orderType,
         total: result.total,
+        statusUrl: `${base}/order/${input.slug}/status/${statusToken}`,
       }),
     });
   }
 
   return NextResponse.json(
-    { ok: true, orderId: result.orderId, total: result.total, trackingUrl: tracking },
+    { ok: true, orderId: result.orderId, total: result.total, trackingUrl: tracking, statusToken },
     { status: 201 },
   );
 }

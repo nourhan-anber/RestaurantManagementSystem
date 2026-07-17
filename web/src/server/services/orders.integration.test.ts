@@ -4,6 +4,7 @@ import { PrismaClient } from '@/generated/prisma/client';
 import {
   advanceOrderStatus,
   cancelOrder,
+  getPublicOrderStatus,
   listKitchenOrders,
   listOrders,
   placeOnlineOrder,
@@ -138,6 +139,20 @@ describe('orders service', () => {
     if (!a.ok) throw new Error('expected ok');
     expect(await settleBill(db, r.id, table.id, { method: 'CASH', orderIds: [999999] })).toEqual({ ok: false, reason: 'empty' });
     expect((await db.order.findUniqueOrThrow({ where: { id: a.orderId } })).status).not.toBe('DELIVERED');
+  });
+
+  it('getPublicOrderStatus returns a PII-free snapshot, tenant-scoped', async () => {
+    const { r, table, item } = await fixture();
+    const placed = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]);
+    if (!placed.ok) throw new Error('expected ok');
+
+    const status = await getPublicOrderStatus(db, r.id, placed.orderId);
+    expect(status?.status).toBe('PENDING');
+    expect(status?.orderType).toBe('DINE_IN');
+    expect(status?.items).toEqual([{ quantity: 2, menuItem: { name: 'Dish' } }]);
+
+    // Cross-tenant lookup by the same order id returns nothing.
+    expect(await getPublicOrderStatus(db, 9999, placed.orderId)).toBeNull();
   });
 
   it('places tableless online orders without touching table status', async () => {
