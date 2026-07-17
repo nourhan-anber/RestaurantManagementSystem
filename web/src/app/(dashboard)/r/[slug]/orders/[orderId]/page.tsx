@@ -115,6 +115,14 @@ export default async function OrderDetailPage({
             <span className="text-muted">Subtotal</span>
             <span className="tabular-nums text-foreground">{formatMoney(Number(order.subtotal))}</span>
           </div>
+          {Number(order.discountAmount) > 0 ? (
+            <div className="flex justify-between">
+              <span className="text-muted">
+                Discount{order.promoCode ? ` · ${order.promoCode}` : order.discountReason ? ` · ${order.discountReason}` : ''}
+              </span>
+              <span className="tabular-nums text-ember-600">−{formatMoney(Number(order.discountAmount))}</span>
+            </div>
+          ) : null}
           {Number(order.taxAmount) > 0 ? (
             <div className="flex justify-between">
               <span className="text-muted">{restaurant.taxLabel} ({Number(order.taxRatePercent)}%)</span>

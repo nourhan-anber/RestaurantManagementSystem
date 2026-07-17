@@ -63,6 +63,7 @@ export async function POST(req: Request) {
     guestName: input.customerName,
     guestEmail: input.guestEmail,
     tip: input.tip,
+    promoCode: input.promoCode,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: 400 });
@@ -82,7 +83,8 @@ export async function POST(req: Request) {
       orderId: result.orderId,
       restaurantId: restaurant.id,
       restaurantName: restaurant.name,
-      subtotalCents: toCents(result.subtotal),
+      // Discount reduces the pre-tax base; charge the discounted subtotal.
+      subtotalCents: toCents(result.subtotal - result.discount),
       taxCents: toCents(result.taxAmount),
       taxLabel: restaurant.taxLabel,
       tipCents: input.tip ? toCents(input.tip) : 0,

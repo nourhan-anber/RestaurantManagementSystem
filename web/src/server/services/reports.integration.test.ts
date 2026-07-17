@@ -5,6 +5,7 @@ import { placeOnlineOrder, placeOrder } from './orders';
 import { refundPayment } from './payments';
 import {
   customerExportRows,
+  discountsTotal,
   refundsTotal,
   revenueRows,
   salesByPaymentMethod,
@@ -21,7 +22,7 @@ const db = new PrismaClient({ adapter });
 
 async function reset() {
   await db.$executeRawUnsafe(
-    'TRUNCATE customers, deliveries, order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
+    'TRUNCATE customers, deliveries, order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, promo_codes, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
   );
 }
 
@@ -176,6 +177,22 @@ describe('reports breakdowns + range', () => {
     await db.payment.create({ data: { restaurantId: r.id, amount: '12.00', tipAmount: '2.00', method: 'CASH', status: 'SUCCEEDED' } });
     await db.payment.create({ data: { restaurantId: r.id, amount: '99.00', tipAmount: '9.00', method: 'ONLINE', status: 'PENDING' } }); // ignored
     expect(await tipsTotal(db, r.id)).toBe(5);
+  });
+
+  it('totals discounts given across delivered orders', async () => {
+    const r = await db.restaurant.create({ data: { name: 'Disco', slug: 'disco' } });
+    const cat = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'main', position: 0 } });
+    const item = await db.menuItem.create({ data: { restaurantId: r.id, categoryId: cat.id, name: 'Dish', price: '10.00' } });
+    // Delivered order with a $4 discount.
+    const delivered = await placeOnlineOrder(db, r.id, { kind: 'pickup', customerName: 'A', customerPhone: '416-555-0000' }, [{ menuItemId: item.id, quantity: 4 }]);
+    if (!delivered.ok) throw new Error('expected ok');
+    await db.order.update({ where: { id: delivered.orderId }, data: { status: 'DELIVERED', discountAmount: '4.00' } });
+    // Open order's discount is ignored (not delivered).
+    const open = await placeOnlineOrder(db, r.id, { kind: 'pickup', customerName: 'B', customerPhone: '416-555-0001' }, [{ menuItemId: item.id, quantity: 1 }]);
+    if (!open.ok) throw new Error('expected ok');
+    await db.order.update({ where: { id: open.orderId }, data: { discountAmount: '9.00' } });
+
+    expect(await discountsTotal(db, r.id)).toBe(4);
   });
 
   it('honors the date range', async () => {

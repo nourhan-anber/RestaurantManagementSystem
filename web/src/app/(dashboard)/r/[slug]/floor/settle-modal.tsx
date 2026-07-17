@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatMoney } from '@/lib/format';
 import { computeTip, TIP_PRESETS } from '@/lib/tip';
+import { orderTotals } from '@/lib/discount';
 import {
   requiresReference,
   SETTLE_METHODS,
@@ -33,12 +34,20 @@ export function SettleBill({
 }) {
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<SettleMethod>('CARD');
-  // Tip: a preset percentage of the bill, or a custom dollar amount when preset is null.
+  // Manager comp: a dollar discount off the bill, re-taxed on the discounted base.
+  const [comp, setComp] = useState('');
+  const [compReason, setCompReason] = useState('');
+  const compAmount = Math.max(0, Number(comp) || 0);
+  // Approximate the server's per-order re-tax with the table-aggregate rate for preview.
+  const ratePercent = subtotal > 0 ? (tax / subtotal) * 100 : 0;
+  const discounted = orderTotals(subtotal, compAmount, ratePercent, tax > 0);
+  const netBill = discounted.total; // post-discount, pre-tip
+  // Tip: a preset percentage of the (post-comp) bill, or a custom dollar amount.
   const [tipPreset, setTipPreset] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState('');
-  const presetTip = tipPreset != null ? computeTip(amount, tipPreset) : 0;
+  const presetTip = tipPreset != null ? computeTip(netBill, tipPreset) : 0;
   const tip = tipPreset != null ? presetTip : Math.max(0, Number(customTip) || 0);
-  const grandTotal = Math.round((amount + tip) * 100) / 100;
+  const grandTotal = Math.round((netBill + tip) * 100) / 100;
 
   const [state, formAction, pending] = useActionState(
     settleTableBill.bind(null, slug, tableId),
@@ -113,6 +122,31 @@ export function SettleBill({
               </div>
 
               <div className="space-y-1.5">
+                <Label htmlFor="comp">Comp / discount</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="comp"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={comp}
+                    onChange={(e) => setComp(e.target.value)}
+                    placeholder="0.00"
+                    className="w-28"
+                  />
+                  <Input
+                    value={compReason}
+                    onChange={(e) => setCompReason(e.target.value)}
+                    placeholder="Reason (optional)"
+                    className="flex-1"
+                  />
+                </div>
+                <input type="hidden" name="discount" value={compAmount} />
+                <input type="hidden" name="discountReason" value={compReason} />
+              </div>
+
+              <div className="space-y-1.5">
                 <Label>Tip</Label>
                 <div className="flex gap-2">
                   {TIP_PRESETS.map((pct) => (
@@ -159,12 +193,20 @@ export function SettleBill({
 
               <input type="hidden" name="tip" value={tip} />
 
-              {tip > 0 ? (
+              {compAmount > 0 || tip > 0 ? (
                 <div className="space-y-1 border-t border-border pt-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-muted">Tip</span>
-                    <span className="tabular-nums text-foreground">{formatMoney(tip)}</span>
-                  </div>
+                  {compAmount > 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted">Comp</span>
+                      <span className="tabular-nums text-ember-600">−{formatMoney(compAmount)}</span>
+                    </div>
+                  ) : null}
+                  {tip > 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted">Tip</span>
+                      <span className="tabular-nums text-foreground">{formatMoney(tip)}</span>
+                    </div>
+                  ) : null}
                   <div className="flex justify-between font-medium">
                     <span className="text-foreground">Charge</span>
                     <span className="tabular-nums text-foreground">{formatMoney(grandTotal)}</span>

@@ -174,6 +174,19 @@ export async function tipsTotal(
   return Number(agg._sum.tipAmount ?? 0);
 }
 
+/** Total discounts/comps given across settled (delivered) orders in the range. */
+export async function discountsTotal(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+): Promise<number> {
+  const agg = await db.order.aggregate({
+    where: deliveredWhere(restaurantId, range),
+    _sum: { discountAmount: true },
+  });
+  return Number(agg._sum.discountAmount ?? 0);
+}
+
 /** Revenue-ranked top menu items and categories over delivered orders in the range. */
 export async function topItemsAndCategories(
   db: PrismaClient,

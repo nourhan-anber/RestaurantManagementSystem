@@ -43,6 +43,8 @@ export async function settleTableBill(
     method: formData.get('method'),
     transactionId: (formData.get('transactionId') as string)?.trim() || undefined,
     tip: formData.get('tip'),
+    discount: formData.get('discount'),
+    discountReason: (formData.get('discountReason') as string)?.trim() || undefined,
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };

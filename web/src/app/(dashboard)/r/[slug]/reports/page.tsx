@@ -5,6 +5,7 @@ import { auth } from '@/server/auth';
 import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import {
+  discountsTotal,
   refundsTotal,
   revenueRows,
   salesByPaymentMethod,
@@ -52,7 +53,7 @@ export default async function ReportsPage({
   const toStr = to ?? dayString(now);
   const range = parseDateRange(fromStr, toStr);
 
-  const [summary, rows, byType, byMethod, top, customers, refunds, tips] = await Promise.all([
+  const [summary, rows, byType, byMethod, top, customers, refunds, tips, discounts] = await Promise.all([
     salesSummary(db, restaurant.id, range),
     revenueRows(db, restaurant.id, range),
     salesByType(db, restaurant.id, range),
@@ -61,6 +62,7 @@ export default async function ReportsPage({
     topCustomers(db, restaurant.id, range),
     refundsTotal(db, restaurant.id, range),
     tipsTotal(db, restaurant.id, range),
+    discountsTotal(db, restaurant.id, range),
   ]);
 
   const byDay = bucketRevenueByDay(rows, restaurant.timezone);
@@ -73,6 +75,7 @@ export default async function ReportsPage({
     { label: 'Avg order', value: formatMoney(summary.avgOrder) },
     { label: 'Items sold', value: String(summary.itemsSold) },
     ...(tips > 0 ? [{ label: 'Tips collected', value: formatMoney(tips) }] : []),
+    ...(discounts > 0 ? [{ label: 'Discounts given', value: formatMoney(discounts) }] : []),
     ...(refunds > 0 ? [{ label: 'Refunds', value: formatMoney(refunds) }] : []),
   ];
 

@@ -48,6 +48,7 @@ export const placeOnlineOrderSchema = z
     quoteId: z.string().max(200).optional(),
     payOnline: z.boolean().optional(),
     tip: z.coerce.number().min(0).max(100_000).optional(),
+    promoCode: z.string().trim().min(1).max(60).optional(),
     items: z.array(orderLineSchema).min(1, 'Add at least one item.'),
   })
   .refine((v) => v.orderType !== 'DELIVERY' || Boolean(v.deliveryAddress), {

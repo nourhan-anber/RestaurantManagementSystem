@@ -9,8 +9,8 @@ import { cartCount, cartTotal, type CartLine, type CartSelectedOption } from '@/
 import { DIETARY_LABELS } from '@/lib/dietary';
 import { formatMoney } from '@/lib/format';
 import { DAY_LABELS, minutesToHhmm, type DayHours } from '@/lib/hours';
-import { computeTax } from '@/lib/tax';
 import { computeTip, TIP_PRESETS } from '@/lib/tip';
+import { applyDiscount, orderTotals, type DiscountKind } from '@/lib/discount';
 import { darkenHex, DEFAULT_THEME_COLOR } from '@/lib/storefront';
 import { orderableSlots } from '@/lib/schedule';
 import { useCart } from '@/stores/cart';
@@ -41,6 +41,24 @@ function friendlyOrderError(code?: string): string {
       return 'Please double-check your details (including your phone number) and try again.';
     default:
       return 'Something went wrong. Please try again.';
+  }
+}
+
+/** Turn an /api/promo error code into a customer-friendly message. */
+function friendlyPromoError(code?: string): string {
+  switch (code) {
+    case 'not_found':
+      return 'That code isn’t valid.';
+    case 'inactive':
+      return 'That code is no longer active.';
+    case 'expired':
+      return 'That code has expired.';
+    case 'exhausted':
+      return 'That code has reached its usage limit.';
+    case 'no_effect':
+      return 'That code doesn’t apply to your current order.';
+    default:
+      return 'Could not apply that code.';
   }
 }
 
@@ -110,6 +128,10 @@ export function StorefrontMenu({
   const [errorMsg, setErrorMsg] = useState('');
   const [tipPreset, setTipPreset] = useState<number | null>(null);
   const [customTip, setCustomTip] = useState('');
+  const [promoInput, setPromoInput] = useState('');
+  const [promoError, setPromoError] = useState('');
+  const [promoChecking, setPromoChecking] = useState(false);
+  const [appliedPromo, setAppliedPromo] = useState<{ code: string; kind: DiscountKind; value: number } | null>(null);
   // '' = as soon as possible; otherwise a scheduled slot's ISO instant.
   const [whenSlot, setWhenSlot] = useState('');
   const scheduleSlots = useMemo(() => orderableSlots(hours, new Date(), timeZone), [hours, timeZone]);
@@ -122,12 +144,15 @@ export function StorefrontMenu({
   const count = cartCount(lines);
   const subtotal = cartTotal(lines);
   const deliveryFee = orderType === 'DELIVERY' ? (quote?.fee ?? 0) : 0;
-  // Tax applies to the food subtotal only (delivery fee is not taxed).
-  const { taxAmount } = computeTax(subtotal, taxRatePercent, taxEnabled);
-  // Gratuity: a preset percentage of the food+tax total, or a custom dollar amount.
-  const tipBase = subtotal + taxAmount;
+  // A promo discount reduces the pre-tax subtotal; tax is charged on the discounted
+  // base (mirrors the server via lib/discount). Recomputed live as the cart changes.
+  const discount = appliedPromo ? applyDiscount(subtotal, { kind: appliedPromo.kind, value: appliedPromo.value }) : 0;
+  const totals = orderTotals(subtotal, discount, taxRatePercent, taxEnabled);
+  const taxAmount = totals.taxAmount;
+  // Gratuity: a preset percentage of the (post-discount) food+tax total, or a custom amount.
+  const tipBase = totals.total;
   const tip = tipPreset != null ? computeTip(tipBase, tipPreset) : Math.max(0, Number(customTip) || 0);
-  const grandTotal = subtotal + taxAmount + deliveryFee + tip;
+  const grandTotal = totals.total + deliveryFee + tip;
 
   // Recolor the whole storefront by overriding the accent CSS variables; Tailwind's
   // opacity variants (bg-ember/10, …) resolve against them via color-mix.
@@ -215,6 +240,7 @@ export function StorefrontMenu({
           requestedTime: effectiveWhen || undefined,
           payOnline: onlinePayment,
           tip: tip > 0 ? tip : undefined,
+          promoCode: appliedPromo?.code,
           items: lines.map((l) => ({
             menuItemId: l.menuItemId,
             quantity: l.quantity,
@@ -245,11 +271,50 @@ export function StorefrontMenu({
     }
   }
 
+  async function applyPromo() {
+    const code = promoInput.trim();
+    if (!code) return;
+    setPromoChecking(true);
+    setPromoError('');
+    try {
+      const res = await fetch('/api/promo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug, code, subtotal }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        ok?: boolean;
+        code?: string;
+        kind?: DiscountKind;
+        value?: number;
+        error?: string;
+      };
+      if (!res.ok || !data.ok || !data.kind || data.value == null) {
+        setAppliedPromo(null);
+        setPromoError(friendlyPromoError(data.error));
+        return;
+      }
+      setAppliedPromo({ code: data.code ?? code, kind: data.kind, value: data.value });
+      setPromoInput('');
+    } catch {
+      setPromoError('Could not check that code. Try again.');
+    } finally {
+      setPromoChecking(false);
+    }
+  }
+
+  function removePromo() {
+    setAppliedPromo(null);
+    setPromoError('');
+  }
+
   function resetCheckout() {
     setStatus('idle');
     setStep('menu');
     setCartOpen(false);
     setQuote(null);
+    setAppliedPromo(null);
+    setPromoError('');
   }
 
   if (status === 'success') {
@@ -699,10 +764,41 @@ export function StorefrontMenu({
                     ) : null}
                   </div>
 
+                  <div className="border-t border-border pt-3">
+                    <span className="text-muted">Promo code</span>
+                    {appliedPromo ? (
+                      <div className="mt-2 flex items-center justify-between rounded-[var(--radius)] border border-ember/40 bg-ember/5 px-3 py-2">
+                        <span className="font-medium text-foreground">{appliedPromo.code}</span>
+                        <button type="button" onClick={removePromo} className="text-xs text-muted hover:text-foreground">
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <div className="mt-2 flex gap-2">
+                        <Input
+                          value={promoInput}
+                          onChange={(e) => setPromoInput(e.target.value)}
+                          placeholder="Enter code"
+                          className="flex-1 uppercase"
+                        />
+                        <Button type="button" variant="secondary" disabled={promoChecking || !promoInput.trim()} onClick={applyPromo}>
+                          {promoChecking ? '…' : 'Apply'}
+                        </Button>
+                      </div>
+                    )}
+                    {promoError ? <p className="mt-1 text-xs text-ember-600">{promoError}</p> : null}
+                  </div>
+
                   <div className="flex justify-between border-t border-border pt-3">
                     <span className="text-muted">Subtotal</span>
                     <span className="tabular-nums text-foreground">{formatMoney(subtotal)}</span>
                   </div>
+                  {discount > 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted">Discount{appliedPromo ? ` · ${appliedPromo.code}` : ''}</span>
+                      <span className="tabular-nums text-ember-600">−{formatMoney(discount)}</span>
+                    </div>
+                  ) : null}
                   {taxAmount > 0 ? (
                     <div className="flex justify-between">
                       <span className="text-muted">{taxLabel}</span>

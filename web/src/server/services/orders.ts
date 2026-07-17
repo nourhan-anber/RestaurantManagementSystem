@@ -2,8 +2,9 @@ import type { PrismaClient } from '@/generated/prisma/client';
 import type { OrderStatus, OrderType } from '@/generated/prisma/enums';
 import { ACTIVE_KITCHEN_STATUSES, TERMINAL_STATUSES } from '@/lib/orders';
 import { priceLine, type ItemSpec } from '@/lib/modifiers';
-import { computeTax } from '@/lib/tax';
 import { allocateTip } from '@/lib/tip';
+import { applyDiscount, orderTotals, validatePromo } from '@/lib/discount';
+import { normalizeCode } from '@/server/services/promos';
 import { upsertCustomerForOrder } from '@/server/services/customers';
 import type { SettleBillInput } from '@/lib/validation/payment';
 
@@ -135,16 +136,19 @@ export async function listOrders(
 }
 
 export type SettleResult =
-  | { ok: true; amount: number; tip: number; orderCount: number }
+  | { ok: true; amount: number; tip: number; discount: number; orderCount: number }
   | { ok: false; reason: 'empty' };
 
 /**
  * Settle a table's bill in one transaction: mark its active orders delivered
  * (the trigger reopens the table) and record **one Payment per order** so each
- * order links to its payment (the order-detail page reads `order.payments`). A
- * bill-level `tip` is split across the orders proportional to their totals; each
- * Payment's `amount` is the order total plus its tip share (what was collected).
- * Re-settling an already-empty table records nothing. `amount` is the pre-tip bill.
+ * order links to its payment (the order-detail page reads `order.payments`).
+ *
+ * An optional manager `discount` (comp) is split across the orders proportional to
+ * their subtotals and re-taxed on the discounted base (see lib/discount); an optional
+ * bill-level `tip` is split proportional to the post-discount totals. Each Payment's
+ * `amount` is that order's post-discount total plus its tip share (what was
+ * collected). `amount` in the result is the post-discount, pre-tip bill.
  */
 export async function settleBill(
   db: PrismaClient,
@@ -155,26 +159,50 @@ export async function settleBill(
   return db.$transaction(async (tx) => {
     const active = await tx.order.findMany({
       where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] } },
-      select: { id: true, total: true, taxAmount: true },
+      select: { id: true, subtotal: true, discountAmount: true, taxRatePercent: true },
     });
     if (active.length === 0) return { ok: false, reason: 'empty' };
     const round2 = (n: number) => Math.round(n * 100) / 100;
-    const amount = round2(active.reduce((sum, o) => sum + Number(o.total), 0));
+
+    // Distribute a bill-level comp across orders proportional to their subtotals, on
+    // top of any discount already on the order, then re-tax each on its discounted base.
+    const comp = round2(input.discount ?? 0);
+    const compParts = allocateTip(active.map((o) => Number(o.subtotal)), comp);
+    const reason = input.discountReason?.trim() || (comp > 0 ? 'Comp' : null);
+
+    const recomputed = active.map((o, i) => {
+      const rate = Number(o.taxRatePercent);
+      const totalDiscount = round2(Number(o.discountAmount) + compParts[i]);
+      const t = orderTotals(Number(o.subtotal), totalDiscount, rate, rate > 0);
+      return { id: o.id, discount: t.discount, taxAmount: t.taxAmount, total: t.total };
+    });
+
+    const amount = round2(recomputed.reduce((sum, r) => sum + r.total, 0));
     const tip = round2(input.tip ?? 0);
-    const tipParts = allocateTip(active.map((o) => Number(o.total)), tip);
+    const tipParts = allocateTip(recomputed.map((r) => r.total), tip);
 
     await Promise.all(
-      active.map((o, i) =>
-        tx.order.update({ where: { id: o.id }, data: { status: 'DELIVERED', tipAmount: tipParts[i] } }),
+      recomputed.map((r, i) =>
+        tx.order.update({
+          where: { id: r.id },
+          data: {
+            status: 'DELIVERED',
+            discountAmount: r.discount,
+            ...(compParts[i] > 0 ? { discountReason: reason } : {}),
+            taxAmount: r.taxAmount,
+            total: r.total,
+            tipAmount: tipParts[i],
+          },
+        }),
       ),
     );
     await tx.payment.createMany({
-      data: active.map((o, i) => ({
+      data: recomputed.map((r, i) => ({
         restaurantId,
         tableId,
-        orderId: o.id,
-        amount: round2(Number(o.total) + tipParts[i]),
-        taxAmount: o.taxAmount,
+        orderId: r.id,
+        amount: round2(r.total + tipParts[i]),
+        taxAmount: r.taxAmount,
         tipAmount: tipParts[i],
         currency: 'usd',
         method: input.method,
@@ -182,7 +210,7 @@ export async function settleBill(
         status: 'SUCCEEDED' as const,
       })),
     });
-    return { ok: true, amount, tip, orderCount: active.length };
+    return { ok: true, amount, tip, discount: comp, orderCount: active.length };
   });
 }
 
@@ -220,6 +248,8 @@ export interface PlaceOrderGuest {
   guestEmail?: string;
   /** Optional gratuity (storefront checkout). Stored on `tipAmount`; `total` stays food+tax. */
   tip?: number;
+  /** Optional promo code (storefront checkout) — validated + redeemed at placement. */
+  promoCode?: string;
 }
 
 /** How an order is fulfilled — dine-in binds a table; online (pickup/delivery) doesn't. */
@@ -236,7 +266,7 @@ export type Fulfillment =
     };
 
 export type PlaceOrderResult =
-  | { ok: true; orderId: number; subtotal: number; taxAmount: number; total: number }
+  | { ok: true; orderId: number; subtotal: number; discount: number; taxAmount: number; total: number }
   | { ok: false; reason: 'table' | 'items' | 'fulfillment' };
 
 /**
@@ -327,8 +357,6 @@ async function placeOrderCore(
   });
   const ratePercent = Number(taxConfig?.taxRatePercent ?? 0);
   const enabled = taxConfig?.taxEnabled ?? false;
-  const tax = computeTax(subtotal, ratePercent, enabled);
-  const appliedRate = tax.taxAmount > 0 ? ratePercent : 0;
 
   const online = fulfillment.kind !== 'dine_in';
   // Identify the customer (CRM): dine-in may carry a guest email; online carries a
@@ -338,8 +366,32 @@ async function placeOrderCore(
       ? { name: guest.guestName ?? null, phone: null, email: guest.guestEmail ?? null }
       : { name: fulfillment.customerName, phone: fulfillment.customerPhone, email: guest.guestEmail ?? null };
 
-  const order = await db.$transaction(async (tx) => {
+  const result = await db.$transaction(async (tx) => {
     const customerId = await upsertCustomerForOrder(tx, restaurantId, contact);
+
+    // Resolve + redeem a promo code (if supplied and valid). The discount reduces the
+    // pre-tax subtotal; tax is then charged on the discounted base (see lib/discount).
+    let discount = 0;
+    let promoApplied: string | null = null;
+    let discountReason: string | null = null;
+    const codeInput = guest.promoCode ? normalizeCode(guest.promoCode) : '';
+    if (codeInput) {
+      const promo = await tx.promoCode.findUnique({
+        where: { restaurantId_code: { restaurantId, code: codeInput } },
+      });
+      if (promo && validatePromo(promo, new Date()).ok) {
+        discount = applyDiscount(subtotal, { kind: promo.kind, value: Number(promo.value) });
+        if (discount > 0) {
+          promoApplied = promo.code;
+          discountReason = `Promo ${promo.code}`;
+          await tx.promoCode.update({ where: { id: promo.id }, data: { usedCount: { increment: 1 } } });
+        }
+      }
+    }
+
+    const totals = orderTotals(subtotal, discount, ratePercent, enabled);
+    const appliedRate = totals.taxAmount > 0 ? ratePercent : 0;
+
     const created = await tx.order.create({
       data: {
         restaurantId,
@@ -351,11 +403,14 @@ async function placeOrderCore(
             : fulfillment.kind === 'pickup'
               ? 'PICKUP'
               : 'DELIVERY',
-        subtotal: tax.subtotal,
+        subtotal: totals.subtotal,
+        discountAmount: totals.discount,
+        discountReason,
+        promoCode: promoApplied,
         taxRatePercent: appliedRate,
-        taxAmount: tax.taxAmount,
+        taxAmount: totals.taxAmount,
         tipAmount: Math.max(0, Math.round((guest.tip ?? 0) * 100) / 100),
-        total: tax.total,
+        total: totals.total,
         notes: guest.notes ?? null,
         guestName: guest.guestName ?? (online ? fulfillment.customerName : null),
         guestEmail: guest.guestEmail ?? null,
@@ -378,15 +433,16 @@ async function placeOrderCore(
         },
       });
     }
-    return created;
+    return { orderId: created.id, totals };
   });
 
   return {
     ok: true,
-    orderId: order.id,
-    subtotal: tax.subtotal,
-    taxAmount: tax.taxAmount,
-    total: tax.total,
+    orderId: result.orderId,
+    subtotal: result.totals.subtotal,
+    discount: result.totals.discount,
+    taxAmount: result.totals.taxAmount,
+    total: result.totals.total,
   };
 }
 

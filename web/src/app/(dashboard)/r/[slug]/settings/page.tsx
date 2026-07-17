@@ -5,10 +5,12 @@ import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { getSubscription } from '@/server/services/billing';
 import { getOpeningHours } from '@/server/services/restaurants';
+import { listPromos } from '@/server/services/promos';
 import { isBillingConfigured } from '@/server/stripe';
 import { isUploadConfigured } from '@/server/storage';
 import { BillingPanel } from './billing-panel';
 import { BrandingForm } from './branding-form';
+import { PromoManager } from './promo-manager';
 
 export default async function SettingsPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -20,9 +22,10 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
   const restaurant = await db.restaurant.findUnique({ where: { slug } });
   if (!restaurant) notFound();
 
-  const [sub, hours] = await Promise.all([
+  const [sub, hours, promos] = await Promise.all([
     getSubscription(db, restaurant.id),
     getOpeningHours(db, restaurant.id),
+    listPromos(db, restaurant.id),
   ]);
   const renewsOn =
     sub?.currentPeriodEnd ? sub.currentPeriodEnd.toLocaleDateString('en-US') : null;
@@ -60,6 +63,22 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
         }))}
         uploadConfigured={isUploadConfigured()}
       />
+
+      <div className="mt-6">
+        <PromoManager
+          slug={slug}
+          promos={promos.map((p) => ({
+            id: p.id,
+            code: p.code,
+            kind: p.kind,
+            value: Number(p.value),
+            active: p.active,
+            maxUses: p.maxUses,
+            usedCount: p.usedCount,
+            expiresAt: p.expiresAt ? p.expiresAt.toLocaleDateString('en-US') : null,
+          }))}
+        />
+      </div>
 
       <div className="mt-6">
         <BillingPanel

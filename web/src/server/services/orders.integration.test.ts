@@ -16,7 +16,7 @@ const db = new PrismaClient({ adapter });
 
 async function reset() {
   await db.$executeRawUnsafe(
-    'TRUNCATE customers, deliveries, order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
+    'TRUNCATE customers, deliveries, order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, promo_codes, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
   );
 }
 
@@ -274,6 +274,26 @@ describe('order tax', () => {
     expect(payments.every((p) => p.orderId != null)).toBe(true);
     expect(payments.reduce((sum, p) => sum + Number(p.amount), 0)).toBeCloseTo(33.9, 2);
     expect(payments.reduce((sum, p) => sum + Number(p.taxAmount), 0)).toBeCloseTo(3.9, 2);
+  });
+
+  it('applies a settle-time comp across orders, re-taxing each on the discounted base', async () => {
+    const { r, table, item } = await taxedFixture();
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]); // subtotal 20
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]); // subtotal 10
+
+    // $9 comp split 20:10 → 6 / 3. Bases 14 / 7; 13% tax 1.82 / 0.91; totals 15.82 / 7.91.
+    const settled = await settleBill(db, r.id, table.id, { method: 'CASH', discount: 9, discountReason: 'VIP' });
+    expect(settled).toMatchObject({ ok: true, discount: 9, orderCount: 2 });
+    expect(settled.ok && settled.amount).toBeCloseTo(23.73, 2); // post-discount, pre-tip bill
+
+    const orders = await db.order.findMany({ where: { restaurantId: r.id }, orderBy: { subtotal: 'asc' } });
+    expect(orders.map((o) => Number(o.discountAmount))).toEqual([3, 6]);
+    expect(orders.map((o) => Number(o.taxAmount))).toEqual([0.91, 1.82]);
+    expect(orders.map((o) => Number(o.total))).toEqual([7.91, 15.82]);
+    expect(orders.every((o) => o.discountReason === 'VIP')).toBe(true);
+
+    const payments = await db.payment.findMany({ where: { restaurantId: r.id } });
+    expect(payments.reduce((s, p) => s + Number(p.amount), 0)).toBeCloseTo(23.73, 2);
   });
 });
 
