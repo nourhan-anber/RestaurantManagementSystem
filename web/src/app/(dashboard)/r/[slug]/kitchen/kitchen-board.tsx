@@ -20,6 +20,7 @@ export interface KdsOrder {
   notes: string | null;
   guestName: string | null;
   createdAt: string;
+  requestedTime: string | null;
   tableNumber: number | null;
   orderType: 'DINE_IN' | 'PICKUP' | 'DELIVERY';
   items: KdsItem[];
@@ -28,6 +29,14 @@ export interface KdsOrder {
 function orderLabel(o: KdsOrder): string {
   if (o.tableNumber != null) return `Table ${o.tableNumber}`;
   return o.orderType === 'DELIVERY' ? 'Delivery' : 'Pickup';
+}
+
+function scheduledLabel(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 const COLUMNS = [
@@ -105,6 +114,11 @@ export function KitchenBoard({ slug, initialOrders }: { slug: string; initialOrd
                       </span>
                       <span className="text-xs text-muted">{timeAgo(o.createdAt)}</span>
                     </div>
+                    {o.requestedTime ? (
+                      <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-ember/10 px-2 py-0.5 text-[0.7rem] font-medium text-ember-600">
+                        ⏰ For {scheduledLabel(o.requestedTime)}
+                      </span>
+                    ) : null}
                     <ul className="mt-2 space-y-1.5 text-sm text-foreground">
                       {o.items.map((it) => (
                         <li key={it.id}>

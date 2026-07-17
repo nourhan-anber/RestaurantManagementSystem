@@ -79,6 +79,7 @@ export default async function OrderPage({
       address={restaurant.address}
       open={isOpenNow(hours, new Date(), restaurant.timezone)}
       hours={hours}
+      timeZone={restaurant.timezone}
       canDeliver={Boolean(restaurant.address)}
       onlinePayment={isOnlinePaymentConfigured()}
       paid={paid === '1'}

@@ -26,6 +26,12 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'online ordering is unavailable' }, { status: 403 });
   }
 
+  // A scheduled time can't be in the past.
+  if (input.requestedTime && input.requestedTime.getTime() < Date.now() - 60_000) {
+    return NextResponse.json({ error: 'requested time is in the past' }, { status: 400 });
+  }
+
+  // The restaurant must be open at the fulfillment time (now, or the scheduled slot).
   const hours = await getOpeningHours(db, restaurant.id);
   const at = input.requestedTime ?? new Date();
   if (!isOpenNow(hours, at, restaurant.timezone)) {

@@ -11,6 +11,7 @@ import { formatMoney } from '@/lib/format';
 import { DAY_LABELS, minutesToHhmm, type DayHours } from '@/lib/hours';
 import { computeTax } from '@/lib/tax';
 import { darkenHex, DEFAULT_THEME_COLOR } from '@/lib/storefront';
+import { orderableSlots } from '@/lib/schedule';
 import { useCart } from '@/stores/cart';
 import { ItemCustomizer } from '../../dine/[slug]/[tableNumber]/item-customizer';
 import type { CustomerMenuItem } from '../../dine/[slug]/[tableNumber]/customer-menu';
@@ -33,6 +34,7 @@ export function StorefrontMenu({
   address,
   open,
   hours,
+  timeZone,
   canDeliver,
   onlinePayment,
   paid,
@@ -51,6 +53,7 @@ export function StorefrontMenu({
   address: string | null;
   open: boolean;
   hours: DayHours[];
+  timeZone: string;
   canDeliver: boolean;
   onlinePayment: boolean;
   paid: boolean;
@@ -83,6 +86,10 @@ export function StorefrontMenu({
   const [orderNote, setOrderNote] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
+  // '' = as soon as possible; otherwise a scheduled slot's ISO instant.
+  const [whenSlot, setWhenSlot] = useState('');
+  const scheduleSlots = useMemo(() => orderableSlots(hours, new Date(), timeZone), [hours, timeZone]);
+  const canOrderNowOrLater = open || scheduleSlots.length > 0;
 
   const count = cartCount(lines);
   const subtotal = cartTotal(lines);
@@ -142,11 +149,13 @@ export function StorefrontMenu({
     }
   }
 
-  // Fulfillment step is complete enough to advance.
+  // Fulfillment step is complete enough to advance. When closed, a scheduled
+  // slot must be chosen (there's no "as soon as possible").
   const fulfillmentReady =
     customerName.trim().length > 0 &&
     customerPhone.trim().length >= 5 &&
-    (orderType === 'PICKUP' || deliveryAddress.trim().length > 0);
+    (orderType === 'PICKUP' || deliveryAddress.trim().length > 0) &&
+    (open || whenSlot !== '');
 
   async function goToDetails() {
     if (orderType === 'DELIVERY') {
@@ -171,6 +180,7 @@ export function StorefrontMenu({
           notes: orderNote.trim() || undefined,
           deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress.trim() : undefined,
           deliveryNotes: orderType === 'DELIVERY' ? deliveryNotes.trim() || undefined : undefined,
+          requestedTime: whenSlot || undefined,
           payOnline: onlinePayment,
           items: lines.map((l) => ({
             menuItemId: l.menuItemId,
@@ -461,14 +471,16 @@ export function StorefrontMenu({
                     <span className="font-medium tabular-nums text-foreground">{formatMoney(subtotal)}</span>
                   </div>
                   {!open ? (
-                    <p role="alert" className="text-sm text-ember-600">
-                      {restaurantName} is currently closed. You can browse, but ordering is paused.
+                    <p className={`text-sm ${scheduleSlots.length > 0 ? 'text-muted' : 'text-ember-600'}`}>
+                      {scheduleSlots.length > 0
+                        ? `${restaurantName} is closed right now — you can schedule an order for later.`
+                        : `${restaurantName} isn’t taking orders right now.`}
                     </p>
                   ) : null}
                   <Button
                     className="w-full"
                     size="lg"
-                    disabled={lines.length === 0 || !open}
+                    disabled={lines.length === 0 || !canOrderNowOrLater}
                     onClick={() => setStep('fulfillment')}
                   >
                     Continue
@@ -500,6 +512,30 @@ export function StorefrontMenu({
                   {!canDeliver ? (
                     <p className="text-xs text-muted">Delivery isn&rsquo;t available for this location.</p>
                   ) : null}
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="when">When</Label>
+                    {open || scheduleSlots.length > 0 ? (
+                      <select
+                        id="when"
+                        value={whenSlot}
+                        onChange={(e) => setWhenSlot(e.target.value)}
+                        className="h-11 w-full rounded-[var(--radius)] border border-border bg-surface px-3 text-sm text-foreground focus-visible:border-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember/30"
+                      >
+                        {open ? <option value="">As soon as possible</option> : null}
+                        {scheduleSlots.map((s) => (
+                          <option key={s.iso} value={s.iso}>
+                            {open ? `Later — ${s.label}` : s.label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <p className="text-sm text-ember-600">No times available right now.</p>
+                    )}
+                    {!open ? (
+                      <p className="text-xs text-muted">Closed now — choose a time we&rsquo;re open.</p>
+                    ) : null}
+                  </div>
 
                   <div className="space-y-1.5">
                     <Label htmlFor="cName">Your name</Label>
