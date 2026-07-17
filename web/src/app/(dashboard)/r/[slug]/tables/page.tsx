@@ -4,6 +4,7 @@ import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { listTables } from '@/server/services/tables';
 import { generateTableToken } from '@/server/table-token';
+import { requestBaseUrl } from '@/server/base-url';
 import { TableManager } from './table-manager';
 
 export default async function TablesPage({ params }: { params: Promise<{ slug: string }> }) {
@@ -17,7 +18,7 @@ export default async function TablesPage({ params }: { params: Promise<{ slug: s
   if (!restaurant) notFound();
 
   const tables = await listTables(db, restaurant.id);
-  const base = process.env.AUTH_URL ?? '';
+  const base = await requestBaseUrl();
   const rows = tables.map((t) => ({
     id: t.id,
     number: t.number,

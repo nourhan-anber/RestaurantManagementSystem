@@ -3,6 +3,7 @@
 import { redirect } from 'next/navigation';
 import { requireAbility } from '@/server/tenant';
 import { getStripe } from '@/server/stripe';
+import { requestBaseUrl } from '@/server/base-url';
 
 export interface CheckoutState {
   error?: string;
@@ -17,7 +18,7 @@ export async function startCheckout(
 
   const stripe = getStripe();
   const priceId = process.env.STRIPE_PRICE_ID;
-  const base = process.env.AUTH_URL ?? '';
+  const base = await requestBaseUrl();
 
   if (!stripe || !priceId) {
     return {

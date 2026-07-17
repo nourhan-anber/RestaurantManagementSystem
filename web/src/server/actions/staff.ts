@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { requireAbility } from '@/server/tenant';
+import { requestBaseUrl } from '@/server/base-url';
 import { acceptInviteSchema, inviteStaffSchema } from '@/lib/validation/staff';
 import { acceptInvite, createInvite } from '@/server/services/staff';
 
@@ -30,7 +31,7 @@ export async function inviteStaff(
   const { token } = await createInvite(db, restaurantId, parsed.data.email, parsed.data.role);
   revalidatePath(`/r/${slug}/staff`);
 
-  const base = process.env.AUTH_URL ?? '';
+  const base = await requestBaseUrl();
   return { inviteUrl: `${base}/accept-invite/${token}` };
 }
 

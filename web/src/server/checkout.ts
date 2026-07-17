@@ -1,4 +1,5 @@
 import { getStripe } from './stripe';
+import { requestBaseUrl } from './base-url';
 
 export interface OrderCheckoutInput {
   slug: string;
@@ -20,7 +21,7 @@ export async function createOrderCheckout(input: OrderCheckoutInput): Promise<{ 
   const stripe = getStripe();
   if (!stripe) return null;
 
-  const base = process.env.AUTH_URL ?? '';
+  const base = await requestBaseUrl();
   const currency = input.currency ?? 'usd';
   const lineItems: Array<{
     price_data: { currency: string; product_data: { name: string }; unit_amount: number };
