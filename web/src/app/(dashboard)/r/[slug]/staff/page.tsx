@@ -29,8 +29,10 @@ export default async function StaffPage({ params }: { params: Promise<{ slug: st
   return (
     <StaffManager
       slug={slug}
+      currentUserId={session!.user.id}
       members={members.map((m) => ({
         id: m.id,
+        userId: m.userId,
         role: m.role,
         name: m.user.name,
         email: m.user.email,

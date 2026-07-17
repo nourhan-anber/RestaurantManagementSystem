@@ -6,10 +6,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { INVITABLE_ROLES } from '@/lib/validation/staff';
-import { inviteStaff, type InviteState } from '@/server/actions/staff';
+import {
+  changeStaffRole,
+  inviteStaff,
+  removeStaff,
+  revokeStaffInvite,
+  type InviteState,
+} from '@/server/actions/staff';
 
 interface Member {
   id: string;
+  userId: string;
   role: string;
   name: string | null;
   email: string;
@@ -21,13 +28,17 @@ interface Invite {
 }
 
 const INITIAL: InviteState = {};
+const selectClass =
+  'h-9 rounded-[var(--radius)] border border-border bg-surface px-2 text-sm text-foreground focus-visible:border-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember/30';
 
 export function StaffManager({
   slug,
+  currentUserId,
   members,
   invites,
 }: {
   slug: string;
+  currentUserId: string;
   members: Member[];
   invites: Invite[];
 }) {
@@ -100,17 +111,45 @@ export function StaffManager({
               Team ({members.length})
             </h3>
             <ul className="mt-2 divide-y divide-border overflow-hidden rounded-[var(--radius)] border border-border bg-surface">
-              {members.map((m) => (
-                <li key={m.id} className="flex items-center justify-between px-4 py-3">
-                  <div>
-                    <p className="font-medium text-foreground">{m.name ?? m.email}</p>
-                    <p className="text-xs text-muted">{m.email}</p>
-                  </div>
-                  <span className="rounded-full bg-pine/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-pine dark:bg-linen/10 dark:text-linen">
-                    {m.role.toLowerCase()}
-                  </span>
-                </li>
-              ))}
+              {members.map((m) => {
+                const isSelf = m.userId === currentUserId;
+                const isOwner = m.role === 'OWNER';
+                return (
+                  <li key={m.id} className="flex items-center justify-between gap-3 px-4 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate font-medium text-foreground">
+                        {m.name ?? m.email}
+                        {isSelf ? <span className="ml-1 text-xs text-muted">(you)</span> : null}
+                      </p>
+                      <p className="truncate text-xs text-muted">{m.email}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-2">
+                      {isOwner || isSelf ? (
+                        <span className="rounded-full bg-pine/10 px-2 py-0.5 text-[0.65rem] uppercase tracking-wide text-pine dark:bg-linen/10 dark:text-linen">
+                          {m.role.toLowerCase()}
+                        </span>
+                      ) : (
+                        <>
+                          <form action={changeStaffRole.bind(null, slug, m.userId)}>
+                            <select name="role" defaultValue={m.role} onChange={(e) => e.currentTarget.form?.requestSubmit()} className={selectClass}>
+                              {INVITABLE_ROLES.map((r) => (
+                                <option key={r} value={r}>
+                                  {r.charAt(0) + r.slice(1).toLowerCase()}
+                                </option>
+                              ))}
+                            </select>
+                          </form>
+                          <form action={removeStaff.bind(null, slug, m.userId)}>
+                            <Button type="submit" size="sm" variant="ghost" className="text-ember-600">
+                              Remove
+                            </Button>
+                          </form>
+                        </>
+                      )}
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           </div>
 
@@ -121,9 +160,16 @@ export function StaffManager({
               </h3>
               <ul className="mt-2 divide-y divide-border overflow-hidden rounded-[var(--radius)] border border-border bg-surface">
                 {invites.map((i) => (
-                  <li key={i.id} className="flex items-center justify-between px-4 py-3">
+                  <li key={i.id} className="flex items-center justify-between gap-3 px-4 py-3">
                     <p className="text-sm text-foreground">{i.email}</p>
-                    <span className="text-xs text-muted">{i.role.toLowerCase()} · pending</span>
+                    <div className="flex items-center gap-3">
+                      <span className="text-xs text-muted">{i.role.toLowerCase()} · pending</span>
+                      <form action={revokeStaffInvite.bind(null, slug, i.id)}>
+                        <Button type="submit" size="sm" variant="ghost" className="text-ember-600">
+                          Revoke
+                        </Button>
+                      </form>
+                    </div>
                   </li>
                 ))}
               </ul>

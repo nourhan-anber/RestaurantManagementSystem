@@ -68,3 +68,54 @@ export async function acceptInvite(
 
   return { ok: true, restaurantSlug: invite.restaurant.slug };
 }
+
+// ─────────────────────── Member management ───────────────────────
+
+export type MemberMutationResult = { ok: true } | { ok: false; reason: 'last_owner' | 'not_found' };
+
+function ownerCount(db: PrismaClient, restaurantId: number): Promise<number> {
+  return db.membership.count({ where: { restaurantId, role: 'OWNER' } });
+}
+
+/** Remove a member — refuses to remove the last OWNER (would orphan the restaurant). */
+export async function removeMember(
+  db: PrismaClient,
+  restaurantId: number,
+  userId: string,
+): Promise<MemberMutationResult> {
+  const m = await db.membership.findUnique({
+    where: { userId_restaurantId: { userId, restaurantId } },
+  });
+  if (!m) return { ok: false, reason: 'not_found' };
+  if (m.role === 'OWNER' && (await ownerCount(db, restaurantId)) <= 1) {
+    return { ok: false, reason: 'last_owner' };
+  }
+  await db.membership.delete({ where: { userId_restaurantId: { userId, restaurantId } } });
+  return { ok: true };
+}
+
+/** Change a member's role — refuses to demote the last OWNER. */
+export async function changeMemberRole(
+  db: PrismaClient,
+  restaurantId: number,
+  userId: string,
+  role: Role,
+): Promise<MemberMutationResult> {
+  const m = await db.membership.findUnique({
+    where: { userId_restaurantId: { userId, restaurantId } },
+  });
+  if (!m) return { ok: false, reason: 'not_found' };
+  if (m.role === 'OWNER' && role !== 'OWNER' && (await ownerCount(db, restaurantId)) <= 1) {
+    return { ok: false, reason: 'last_owner' };
+  }
+  await db.membership.update({
+    where: { userId_restaurantId: { userId, restaurantId } },
+    data: { role },
+  });
+  return { ok: true };
+}
+
+/** Revoke a still-pending invite. Tenant-scoped; already-accepted invites are untouched. */
+export function revokeInvite(db: PrismaClient, restaurantId: number, inviteId: string) {
+  return db.staffInvite.deleteMany({ where: { id: inviteId, restaurantId, acceptedAt: null } });
+}

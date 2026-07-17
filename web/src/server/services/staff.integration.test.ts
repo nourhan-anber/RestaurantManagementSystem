@@ -1,7 +1,14 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
-import { acceptInvite, createInvite, hashInviteToken } from './staff';
+import {
+  acceptInvite,
+  changeMemberRole,
+  createInvite,
+  hashInviteToken,
+  removeMember,
+  revokeInvite,
+} from './staff';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const db = new PrismaClient({ adapter });
@@ -67,5 +74,50 @@ describe('staff invites', () => {
       ok: false,
       reason: 'expired',
     });
+  });
+});
+
+describe('member management', () => {
+  async function withMembers() {
+    const r = await db.restaurant.create({ data: { name: 'Bella', slug: 'bella' } });
+    const owner = await db.user.create({ data: { email: 'owner@b.test', name: 'Own', passwordHash: 'x' } });
+    const chef = await db.user.create({ data: { email: 'chef@b.test', name: 'Chef', passwordHash: 'x' } });
+    await db.membership.create({ data: { userId: owner.id, restaurantId: r.id, role: 'OWNER' } });
+    await db.membership.create({ data: { userId: chef.id, restaurantId: r.id, role: 'CHEF' } });
+    return { r, owner, chef };
+  }
+
+  it('changes a member role and removes a member', async () => {
+    const { r, chef } = await withMembers();
+    expect(await changeMemberRole(db, r.id, chef.id, 'MANAGER')).toEqual({ ok: true });
+    expect(
+      (await db.membership.findUniqueOrThrow({ where: { userId_restaurantId: { userId: chef.id, restaurantId: r.id } } })).role,
+    ).toBe('MANAGER');
+
+    expect(await removeMember(db, r.id, chef.id)).toEqual({ ok: true });
+    expect(await db.membership.count({ where: { restaurantId: r.id } })).toBe(1);
+  });
+
+  it('refuses to remove or demote the last owner', async () => {
+    const { r, owner } = await withMembers();
+    expect(await removeMember(db, r.id, owner.id)).toEqual({ ok: false, reason: 'last_owner' });
+    expect(await changeMemberRole(db, r.id, owner.id, 'MANAGER')).toEqual({ ok: false, reason: 'last_owner' });
+    expect(await db.membership.count({ where: { restaurantId: r.id, role: 'OWNER' } })).toBe(1);
+  });
+
+  it('revokes a pending invite but not an accepted one', async () => {
+    const r = await db.restaurant.create({ data: { name: 'X', slug: 'x' } });
+    const { token } = await createInvite(db, r.id, 'p@x.test', 'CHEF');
+    const pending = await db.staffInvite.findFirstOrThrow({ where: { restaurantId: r.id } });
+    const accepted = await createInvite(db, r.id, 'a@x.test', 'SERVER');
+    await acceptInvite(db, accepted.token, { name: 'A', password: 'longenough' });
+    const acceptedRow = await db.staffInvite.findFirstOrThrow({ where: { email: 'a@x.test' } });
+
+    expect((await revokeInvite(db, r.id, pending.id)).count).toBe(1);
+    expect(await db.staffInvite.findUnique({ where: { id: pending.id } })).toBeNull();
+    // Accepted invite is not revocable.
+    expect((await revokeInvite(db, r.id, acceptedRow.id)).count).toBe(0);
+    // Unknown token no longer resolves (revoked).
+    expect(await db.staffInvite.findUnique({ where: { tokenHash: hashInviteToken(token) } })).toBeNull();
   });
 });

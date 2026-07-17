@@ -1,12 +1,19 @@
 'use server';
 
+import { z } from 'zod';
 import { revalidatePath } from 'next/cache';
 import { redirect } from 'next/navigation';
 import { db } from '@/server/db';
 import { requireAbility } from '@/server/tenant';
 import { requestBaseUrl } from '@/server/base-url';
-import { acceptInviteSchema, inviteStaffSchema } from '@/lib/validation/staff';
-import { acceptInvite, createInvite } from '@/server/services/staff';
+import { acceptInviteSchema, INVITABLE_ROLES, inviteStaffSchema } from '@/lib/validation/staff';
+import {
+  acceptInvite,
+  changeMemberRole,
+  createInvite,
+  removeMember,
+  revokeInvite,
+} from '@/server/services/staff';
 
 export interface InviteState {
   error?: string;
@@ -65,4 +72,32 @@ export async function submitAcceptInvite(
   }
 
   redirect('/login');
+}
+
+// ─────────────────────── Member management ───────────────────────
+
+/** Remove a member. Silently no-ops on self-removal or the last-owner guard. */
+export async function removeStaff(slug: string, userId: string): Promise<void> {
+  const ctx = await requireAbility(slug, 'staff:manage');
+  if (userId !== ctx.userId) {
+    await removeMember(db, ctx.restaurantId, userId);
+  }
+  revalidatePath(`/r/${slug}/staff`);
+}
+
+/** Change a member's role (to a manager/chef/server role — never OWNER via this UI). */
+export async function changeStaffRole(slug: string, userId: string, formData: FormData): Promise<void> {
+  const ctx = await requireAbility(slug, 'staff:manage');
+  const parsed = z.enum(INVITABLE_ROLES).safeParse(formData.get('role'));
+  if (parsed.success && userId !== ctx.userId) {
+    await changeMemberRole(db, ctx.restaurantId, userId, parsed.data);
+  }
+  revalidatePath(`/r/${slug}/staff`);
+}
+
+/** Revoke a pending invite. */
+export async function revokeStaffInvite(slug: string, inviteId: string): Promise<void> {
+  const ctx = await requireAbility(slug, 'staff:manage');
+  await revokeInvite(db, ctx.restaurantId, inviteId);
+  revalidatePath(`/r/${slug}/staff`);
 }
