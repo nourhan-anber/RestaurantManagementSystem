@@ -39,6 +39,7 @@ describe('reports', () => {
 
     const summary = await salesSummary(db, r.id);
     expect(summary.revenue).toBe(35);
+    expect(summary.taxCollected).toBe(0);
     expect(summary.orders).toBe(1);
     expect(summary.itemsSold).toBe(5);
     expect(summary.avgOrder).toBe(35);
@@ -52,7 +53,34 @@ describe('reports', () => {
 
   it('returns zeros with no delivered orders', async () => {
     const r = await db.restaurant.create({ data: { name: 'Empty', slug: 'empty' } });
-    expect(await salesSummary(db, r.id)).toEqual({ revenue: 0, orders: 0, avgOrder: 0, itemsSold: 0 });
+    expect(await salesSummary(db, r.id)).toEqual({
+      revenue: 0,
+      taxCollected: 0,
+      orders: 0,
+      avgOrder: 0,
+      itemsSold: 0,
+    });
     expect(await topItems(db, r.id)).toEqual([]);
+  });
+
+  it('reports net revenue and tax collected separately when tax is enabled', async () => {
+    const r = await db.restaurant.create({
+      data: { name: 'Taxed', slug: 'taxed', taxEnabled: true, taxRatePercent: '13.0000' },
+    });
+    const table = await db.table.create({ data: { restaurantId: r.id, number: 1 } });
+    const cat = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'main', position: 0 } });
+    const item = await db.menuItem.create({
+      data: { restaurantId: r.id, categoryId: cat.id, name: 'Dish', price: '10.00' },
+    });
+
+    // Subtotal 20.00, HST 13% = 2.60, total 22.60.
+    const o = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]);
+    if (!o.ok) throw new Error('expected ok');
+    await db.order.update({ where: { id: o.orderId }, data: { status: 'DELIVERED' } });
+
+    const summary = await salesSummary(db, r.id);
+    expect(summary.revenue).toBe(20); // net, excludes tax
+    expect(summary.taxCollected).toBe(2.6);
+    expect(summary.avgOrder).toBe(20);
   });
 });

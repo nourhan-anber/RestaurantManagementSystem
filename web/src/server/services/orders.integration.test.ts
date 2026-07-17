@@ -199,3 +199,57 @@ describe('placeOrder with modifiers', () => {
     expect(order.notes).toBe('window seat');
   });
 });
+
+describe('order tax', () => {
+  async function taxedFixture(ratePercent = '13.0000') {
+    const r = await db.restaurant.create({
+      data: { name: 'Taxed', slug: 'taxed', taxEnabled: true, taxRatePercent: ratePercent },
+    });
+    const table = await db.table.create({ data: { restaurantId: r.id, number: 1 } });
+    const cat = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'main', position: 0 } });
+    const item = await db.menuItem.create({
+      data: { restaurantId: r.id, categoryId: cat.id, name: 'Dish', price: '10.00' },
+    });
+    return { r, table, item };
+  }
+
+  it('snapshots subtotal, applied rate, and add-on tax onto the order', async () => {
+    const { r, table, item } = await taxedFixture();
+    const res = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]);
+    expect(res).toMatchObject({ ok: true, total: 22.6 });
+
+    const order = await db.order.findFirstOrThrow({ where: { restaurantId: r.id } });
+    expect(Number(order.subtotal)).toBe(20);
+    expect(Number(order.taxRatePercent)).toBe(13);
+    expect(Number(order.taxAmount)).toBe(2.6);
+    expect(Number(order.total)).toBe(22.6);
+  });
+
+  it('leaves orders untaxed when the restaurant has tax disabled', async () => {
+    const r = await db.restaurant.create({ data: { name: 'Plain', slug: 'plain' } });
+    const table = await db.table.create({ data: { restaurantId: r.id, number: 1 } });
+    const cat = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'main', position: 0 } });
+    const item = await db.menuItem.create({
+      data: { restaurantId: r.id, categoryId: cat.id, name: 'Dish', price: '10.00' },
+    });
+    const res = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
+    if (!res.ok) throw new Error('expected ok');
+    const order = await db.order.findUniqueOrThrow({ where: { id: res.orderId } });
+    expect(Number(order.subtotal)).toBe(10);
+    expect(Number(order.taxAmount)).toBe(0);
+    expect(Number(order.total)).toBe(10);
+  });
+
+  it('settling a taxed bill records the summed tax on the payment', async () => {
+    const { r, table, item } = await taxedFixture();
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]); // 20 + 2.60
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]); // 10 + 1.30
+
+    const settled = await settleBill(db, r.id, table.id, { method: 'CASH' });
+    expect(settled).toMatchObject({ ok: true, amount: 33.9 });
+
+    const payment = await db.payment.findFirstOrThrow({ where: { restaurantId: r.id } });
+    expect(Number(payment.amount)).toBe(33.9);
+    expect(Number(payment.taxAmount)).toBe(3.9);
+  });
+});

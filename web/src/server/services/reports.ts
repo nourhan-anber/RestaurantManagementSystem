@@ -2,18 +2,19 @@ import type { PrismaClient } from '@/generated/prisma/client';
 import { safeAverage } from '@/lib/reports';
 
 export interface SalesSummary {
-  revenue: number;
+  revenue: number; // net of tax
+  taxCollected: number;
   orders: number;
   avgOrder: number;
   itemsSold: number;
 }
 
-/** Revenue/orders/items from settled (delivered) orders, scoped to the tenant. */
+/** Revenue/tax/orders/items from settled (delivered) orders, scoped to the tenant. */
 export async function salesSummary(db: PrismaClient, restaurantId: number): Promise<SalesSummary> {
   const [orderAgg, itemAgg] = await Promise.all([
     db.order.aggregate({
       where: { restaurantId, status: 'DELIVERED' },
-      _sum: { total: true },
+      _sum: { subtotal: true, taxAmount: true },
       _count: { _all: true },
     }),
     db.orderItem.aggregate({
@@ -22,10 +23,12 @@ export async function salesSummary(db: PrismaClient, restaurantId: number): Prom
     }),
   ]);
 
-  const revenue = Number(orderAgg._sum.total ?? 0);
+  const revenue = Number(orderAgg._sum.subtotal ?? 0);
+  const taxCollected = Number(orderAgg._sum.taxAmount ?? 0);
   const orders = orderAgg._count._all;
   return {
     revenue,
+    taxCollected,
     orders,
     avgOrder: safeAverage(revenue, orders),
     itemsSold: itemAgg._sum.quantity ?? 0,

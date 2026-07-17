@@ -2,6 +2,7 @@ import type { PrismaClient } from '@/generated/prisma/client';
 import type { OrderStatus } from '@/generated/prisma/enums';
 import { ACTIVE_KITCHEN_STATUSES, TERMINAL_STATUSES } from '@/lib/orders';
 import { priceLine, type ItemSpec } from '@/lib/modifiers';
+import { computeTax } from '@/lib/tax';
 import type { SettleBillInput } from '@/lib/validation/payment';
 
 export function listKitchenOrders(db: PrismaClient, restaurantId: number) {
@@ -64,10 +65,12 @@ export async function settleBill(
   return db.$transaction(async (tx) => {
     const active = await tx.order.findMany({
       where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] } },
-      select: { total: true },
+      select: { total: true, taxAmount: true },
     });
     if (active.length === 0) return { ok: false, reason: 'empty' };
-    const amount = active.reduce((sum, o) => sum + Number(o.total), 0);
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+    const amount = round2(active.reduce((sum, o) => sum + Number(o.total), 0));
+    const taxAmount = round2(active.reduce((sum, o) => sum + Number(o.taxAmount), 0));
 
     await tx.order.updateMany({
       where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] } },
@@ -78,6 +81,7 @@ export async function settleBill(
         restaurantId,
         tableId,
         amount,
+        taxAmount,
         currency: 'usd',
         method: input.method,
         transactionId: input.transactionId ?? null,
@@ -198,7 +202,18 @@ async function placeOrderCore(
     lines.push({ item: it, unitPrice: result.line.unitPrice, snapshots: result.line.snapshots });
   }
 
-  const total = lines.reduce((sum, l) => sum + l.unitPrice * l.item.quantity, 0);
+  const subtotal = lines.reduce((sum, l) => sum + l.unitPrice * l.item.quantity, 0);
+
+  // Server-authoritative sales tax (add-on): read the restaurant's config and
+  // snapshot the applied rate + amount onto the order so history stays correct.
+  const taxConfig = await db.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { taxEnabled: true, taxRatePercent: true },
+  });
+  const ratePercent = Number(taxConfig?.taxRatePercent ?? 0);
+  const enabled = taxConfig?.taxEnabled ?? false;
+  const tax = computeTax(subtotal, ratePercent, enabled);
+  const appliedRate = tax.taxAmount > 0 ? ratePercent : 0;
 
   const online = fulfillment.kind !== 'dine_in';
   const order = await db.$transaction(async (tx) => {
@@ -212,7 +227,10 @@ async function placeOrderCore(
             : fulfillment.kind === 'pickup'
               ? 'PICKUP'
               : 'DELIVERY',
-        total,
+        subtotal: tax.subtotal,
+        taxRatePercent: appliedRate,
+        taxAmount: tax.taxAmount,
+        total: tax.total,
         notes: guest.notes ?? null,
         guestName: guest.guestName ?? (online ? fulfillment.customerName : null),
         guestEmail: guest.guestEmail ?? null,
@@ -238,7 +256,7 @@ async function placeOrderCore(
     return created;
   });
 
-  return { ok: true, orderId: order.id, total };
+  return { ok: true, orderId: order.id, total: tax.total };
 }
 
 /** Dine-in order placement (unchanged contract): the current /api/orders route + tests use this. */

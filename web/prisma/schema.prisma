@@ -98,6 +98,10 @@ model Restaurant {
   address               String?
   timezone              String   @default("UTC")
   onlineOrderingEnabled Boolean  @default(false) @map("online_ordering_enabled")
+  taxEnabled            Boolean  @default(false) @map("tax_enabled")
+  taxRatePercent        Decimal  @default(0) @db.Decimal(6, 4) @map("tax_rate_percent")
+  taxLabel              String   @default("Tax") @map("tax_label")
+  taxRegion             String?  @map("tax_region")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 
@@ -235,6 +239,9 @@ model Order {
   deliveryAddress String?     @map("delivery_address")
   deliveryNotes   String?     @map("delivery_notes")
   requestedTime   DateTime?   @map("requested_time")
+  subtotal        Decimal     @default(0) @db.Decimal(10, 2)
+  taxRatePercent  Decimal     @default(0) @db.Decimal(6, 4) @map("tax_rate_percent")
+  taxAmount       Decimal     @default(0) @db.Decimal(10, 2) @map("tax_amount")
   total           Decimal     @default(0) @db.Decimal(10, 2)
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
@@ -403,6 +410,7 @@ model Payment {
   transactionId         String?       @map("transaction_id")
   stripePaymentIntentId String?       @unique @map("stripe_payment_intent_id")
   amount                Decimal       @db.Decimal(10, 2)
+  taxAmount             Decimal       @default(0) @db.Decimal(10, 2) @map("tax_amount")
   currency              String        @default("usd")
   status                PaymentStatus @default(PENDING)
   createdAt             DateTime      @default(now()) @map("created_at")
