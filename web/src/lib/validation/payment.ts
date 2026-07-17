@@ -13,6 +13,8 @@ export const settleBillSchema = z
       z.coerce.number().min(0).max(100_000).optional(),
     ),
     discountReason: z.string().trim().max(200).optional(),
+    // A subset of the table's open orders to settle now (split the check); empty = all.
+    orderIds: z.array(z.coerce.number().int().positive()).max(200).optional(),
   })
   .refine((d) => d.method !== 'CARD' || Boolean(d.transactionId), {
     message: 'A card payment needs a transaction id.',

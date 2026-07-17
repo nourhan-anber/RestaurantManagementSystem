@@ -149,6 +149,9 @@ export type SettleResult =
  * bill-level `tip` is split proportional to the post-discount totals. Each Payment's
  * `amount` is that order's post-discount total plus its tip share (what was
  * collected). `amount` in the result is the post-discount, pre-tip bill.
+ *
+ * Pass `orderIds` to settle only a subset of the table's open orders (split the
+ * check); the rest stay open and the table stays occupied until all are settled.
  */
 export async function settleBill(
   db: PrismaClient,
@@ -157,8 +160,9 @@ export async function settleBill(
   input: SettleBillInput,
 ): Promise<SettleResult> {
   return db.$transaction(async (tx) => {
+    const selected = input.orderIds?.length ? { id: { in: input.orderIds } } : {};
     const active = await tx.order.findMany({
-      where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] } },
+      where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] }, ...selected },
       select: { id: true, subtotal: true, discountAmount: true, taxRatePercent: true },
     });
     if (active.length === 0) return { ok: false, reason: 'empty' };

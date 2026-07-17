@@ -109,6 +109,37 @@ describe('orders service', () => {
     expect(orders.map((o) => Number(o.tipAmount))).toEqual([2, 4]);
   });
 
+  it('settles only the selected orders, leaving the rest open (split the check)', async () => {
+    const { r, table, item } = await fixture();
+    const a = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]); // $10
+    const b = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]); // $20
+    if (!a.ok || !b.ok) throw new Error('expected ok');
+
+    // Settle order A only.
+    const first = await settleBill(db, r.id, table.id, { method: 'CASH', orderIds: [a.orderId] });
+    expect(first).toMatchObject({ ok: true, amount: 10, orderCount: 1 });
+
+    expect((await db.order.findUniqueOrThrow({ where: { id: a.orderId } })).status).toBe('DELIVERED');
+    expect((await db.order.findUniqueOrThrow({ where: { id: b.orderId } })).status).not.toBe('DELIVERED');
+    // The table stays occupied while order B is still open.
+    expect((await db.table.findUniqueOrThrow({ where: { id: table.id } })).status).toBe('OCCUPIED');
+    expect(await db.payment.count({ where: { restaurantId: r.id } })).toBe(1);
+
+    // Settle the rest → table reopens.
+    const second = await settleBill(db, r.id, table.id, { method: 'CARD', transactionId: 'x', orderIds: [b.orderId] });
+    expect(second).toMatchObject({ ok: true, amount: 20, orderCount: 1 });
+    expect((await db.table.findUniqueOrThrow({ where: { id: table.id } })).status).toBe('OPEN');
+    expect(await db.payment.count({ where: { restaurantId: r.id } })).toBe(2);
+  });
+
+  it('settles nothing when the selection matches no open order', async () => {
+    const { r, table, item } = await fixture();
+    const a = await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]);
+    if (!a.ok) throw new Error('expected ok');
+    expect(await settleBill(db, r.id, table.id, { method: 'CASH', orderIds: [999999] })).toEqual({ ok: false, reason: 'empty' });
+    expect((await db.order.findUniqueOrThrow({ where: { id: a.orderId } })).status).not.toBe('DELIVERED');
+  });
+
   it('places tableless online orders without touching table status', async () => {
     const { r, table, item } = await fixture();
     // Occupy the dine-in table so we can prove the online order does not change it.

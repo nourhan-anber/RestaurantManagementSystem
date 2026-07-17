@@ -25,6 +25,11 @@ describe('settleBillSchema', () => {
   it('rejects a negative tip', () => {
     expect(settleBillSchema.safeParse({ method: 'CASH', tip: '-1' }).success).toBe(false);
   });
+
+  it('coerces split orderIds from strings', () => {
+    const parsed = settleBillSchema.safeParse({ method: 'CASH', orderIds: ['1', '2'] });
+    expect(parsed.success && parsed.data.orderIds).toEqual([1, 2]);
+  });
 });
 
 describe('refundSchema', () => {

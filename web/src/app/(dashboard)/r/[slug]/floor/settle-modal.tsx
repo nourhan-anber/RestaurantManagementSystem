@@ -17,28 +17,41 @@ import { settleTableBill, type SettleState } from '@/server/actions/orders';
 
 const INITIAL: SettleState = {};
 
+export interface SettleOrder {
+  id: number;
+  label: string;
+  subtotal: number;
+  tax: number;
+  total: number;
+}
+
 export function SettleBill({
   slug,
   tableId,
-  amount,
-  subtotal,
-  tax,
+  orders,
   taxLabel,
 }: {
   slug: string;
   tableId: number;
-  amount: number;
-  subtotal: number;
-  tax: number;
+  orders: SettleOrder[];
   taxLabel: string;
 }) {
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<SettleMethod>('CARD');
-  // Manager comp: a dollar discount off the bill, re-taxed on the discounted base.
+  // Split the check: which of the table's open orders to settle now (default all).
+  const [selectedIds, setSelectedIds] = useState<number[]>(() => orders.map((o) => o.id));
+  const selected = orders.filter((o) => selectedIds.includes(o.id));
+  const partial = selected.length > 0 && selected.length < orders.length;
+
+  const subtotal = selected.reduce((s, o) => s + o.subtotal, 0);
+  const tax = selected.reduce((s, o) => s + o.tax, 0);
+  const amount = Math.round(selected.reduce((s, o) => s + o.total, 0) * 100) / 100;
+
+  // Manager comp: a dollar discount off the (selected) bill, re-taxed on the discounted base.
   const [comp, setComp] = useState('');
   const [compReason, setCompReason] = useState('');
   const compAmount = Math.max(0, Number(comp) || 0);
-  // Approximate the server's per-order re-tax with the table-aggregate rate for preview.
+  // Approximate the server's per-order re-tax with the aggregate rate for preview.
   const ratePercent = subtotal > 0 ? (tax / subtotal) * 100 : 0;
   const discounted = orderTotals(subtotal, compAmount, ratePercent, tax > 0);
   const netBill = discounted.total; // post-discount, pre-tip
@@ -48,6 +61,12 @@ export function SettleBill({
   const presetTip = tipPreset != null ? computeTip(netBill, tipPreset) : 0;
   const tip = tipPreset != null ? presetTip : Math.max(0, Number(customTip) || 0);
   const grandTotal = Math.round((netBill + tip) * 100) / 100;
+
+  const tableTotal = Math.round(orders.reduce((s, o) => s + o.total, 0) * 100) / 100;
+
+  function toggleOrder(id: number) {
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]));
+  }
 
   const [state, formAction, pending] = useActionState(
     settleTableBill.bind(null, slug, tableId),
@@ -69,7 +88,7 @@ export function SettleBill({
         className="mt-4 w-full"
         onClick={() => setOpen(true)}
       >
-        Close bill · {formatMoney(amount)}
+        Close bill · {formatMoney(tableTotal)}
       </Button>
 
       {open ? (
@@ -77,6 +96,33 @@ export function SettleBill({
           <button className="absolute inset-0 bg-black/40" aria-label="Close" onClick={() => setOpen(false)} />
           <div className="relative w-full max-w-sm rounded-[var(--radius)] bg-background p-5 shadow-xl">
             <h2 className="font-display text-lg text-foreground">Settle bill</h2>
+
+            {orders.length > 1 ? (
+              <div className="mt-3 space-y-1.5">
+                <Label>Orders to settle</Label>
+                <ul className="space-y-1">
+                  {orders.map((o) => (
+                    <li key={o.id}>
+                      <label className="flex cursor-pointer items-center justify-between gap-2 rounded-[var(--radius)] border border-border px-3 py-2 text-sm">
+                        <span className="flex items-center gap-2">
+                          <input
+                            type="checkbox"
+                            checked={selectedIds.includes(o.id)}
+                            onChange={() => toggleOrder(o.id)}
+                          />
+                          <span className="text-foreground">{o.label}</span>
+                        </span>
+                        <span className="tabular-nums text-muted">{formatMoney(o.total)}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                {partial ? (
+                  <p className="text-xs text-muted">Settling {selected.length} of {orders.length} — the table stays open.</p>
+                ) : null}
+              </div>
+            ) : null}
+
             {tax > 0 ? (
               <div className="mt-2 space-y-1 text-sm">
                 <div className="flex justify-between">
@@ -192,6 +238,9 @@ export function SettleBill({
               ) : null}
 
               <input type="hidden" name="tip" value={tip} />
+              {selected.map((o) => (
+                <input key={o.id} type="hidden" name="orderIds" value={o.id} />
+              ))}
 
               {compAmount > 0 || tip > 0 ? (
                 <div className="space-y-1 border-t border-border pt-2 text-sm">
@@ -217,7 +266,7 @@ export function SettleBill({
               {state.error ? <p role="alert" className="text-sm text-ember-600">{state.error}</p> : null}
 
               <div className="flex gap-2">
-                <Button type="submit" disabled={pending}>
+                <Button type="submit" disabled={pending || selected.length === 0}>
                   {pending ? 'Settling…' : `Mark paid · ${formatMoney(grandTotal)}`}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
