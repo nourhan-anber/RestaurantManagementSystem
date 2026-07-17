@@ -25,6 +25,24 @@ interface Quote {
   etaMinutes: number;
 }
 
+/** Turn an /api/order error code into a customer-friendly message. */
+function friendlyOrderError(code?: string): string {
+  switch (code) {
+    case 'restaurant is closed':
+      return 'That time is no longer available — please pick another.';
+    case 'requested time is in the past':
+      return 'That time has already passed — please pick another.';
+    case 'not accepting orders right now':
+      return 'The restaurant just paused new orders. Please try again shortly.';
+    case 'online ordering is unavailable':
+      return 'Online ordering isn’t available right now.';
+    case 'invalid request':
+      return 'Please double-check your details (including your phone number) and try again.';
+    default:
+      return 'Something went wrong. Please try again.';
+  }
+}
+
 export function StorefrontMenu({
   slug,
   restaurantName,
@@ -88,10 +106,15 @@ export function StorefrontMenu({
   const [orderNote, setOrderNote] = useState('');
   const [quote, setQuote] = useState<Quote | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
+  const [errorMsg, setErrorMsg] = useState('');
   // '' = as soon as possible; otherwise a scheduled slot's ISO instant.
   const [whenSlot, setWhenSlot] = useState('');
   const scheduleSlots = useMemo(() => orderableSlots(hours, new Date(), timeZone), [hours, timeZone]);
   const canOrderNowOrLater = open || scheduleSlots.length > 0;
+  // When closed there is no "as soon as possible", so default to the first slot —
+  // otherwise the controlled <select> shows a time but the value stays empty and
+  // we'd send no requestedTime (the server would then treat it as "now" = closed).
+  const effectiveWhen = whenSlot || (!open && scheduleSlots.length > 0 ? scheduleSlots[0].iso : '');
 
   const count = cartCount(lines);
   const subtotal = cartTotal(lines);
@@ -157,7 +180,7 @@ export function StorefrontMenu({
     customerName.trim().length > 0 &&
     customerPhone.trim().length >= 5 &&
     (orderType === 'PICKUP' || deliveryAddress.trim().length > 0) &&
-    (open || whenSlot !== '');
+    (open || effectiveWhen !== '');
 
   async function goToDetails() {
     if (orderType === 'DELIVERY') {
@@ -169,6 +192,7 @@ export function StorefrontMenu({
 
   async function placeOrder() {
     setStatus('placing');
+    setErrorMsg('');
     try {
       const res = await fetch('/api/order', {
         method: 'POST',
@@ -182,7 +206,7 @@ export function StorefrontMenu({
           notes: orderNote.trim() || undefined,
           deliveryAddress: orderType === 'DELIVERY' ? deliveryAddress.trim() : undefined,
           deliveryNotes: orderType === 'DELIVERY' ? deliveryNotes.trim() || undefined : undefined,
-          requestedTime: whenSlot || undefined,
+          requestedTime: effectiveWhen || undefined,
           payOnline: onlinePayment,
           items: lines.map((l) => ({
             menuItemId: l.menuItemId,
@@ -192,7 +216,12 @@ export function StorefrontMenu({
           })),
         }),
       });
-      if (!res.ok) throw new Error('failed');
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setErrorMsg(friendlyOrderError(body.error));
+        setStatus('error');
+        return;
+      }
       const data = await res.json();
       // Online payment: hand off to Stripe Checkout (we return via ?paid=1).
       if (data.checkoutUrl) {
@@ -204,6 +233,7 @@ export function StorefrontMenu({
       clear();
       setStatus('success');
     } catch {
+      setErrorMsg('');
       setStatus('error');
     }
   }
@@ -524,7 +554,7 @@ export function StorefrontMenu({
                     {open || scheduleSlots.length > 0 ? (
                       <select
                         id="when"
-                        value={whenSlot}
+                        value={effectiveWhen}
                         onChange={(e) => setWhenSlot(e.target.value)}
                         className="h-11 w-full rounded-[var(--radius)] border border-border bg-surface px-3 text-sm text-foreground focus-visible:border-ember focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ember/30"
                       >
@@ -635,7 +665,9 @@ export function StorefrontMenu({
                     <span className="tabular-nums text-foreground">{formatMoney(grandTotal)}</span>
                   </div>
                   {status === 'error' ? (
-                    <p role="alert" className="text-ember-600">Something went wrong. Please try again.</p>
+                    <p role="alert" className="text-ember-600">
+                      {errorMsg || 'Something went wrong. Please try again.'}
+                    </p>
                   ) : null}
                 </div>
                 <div className="space-y-3 border-t border-border px-5 py-4">
