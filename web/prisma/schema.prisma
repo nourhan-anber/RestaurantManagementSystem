@@ -91,6 +91,24 @@ enum PromoKind {
   AMOUNT  @map("amount")
 }
 
+enum ReservationStatus {
+  BOOKED    @map("booked")
+  SEATED    @map("seated")
+  CANCELLED @map("cancelled")
+  NO_SHOW   @map("no_show")
+}
+
+enum ReservationSource {
+  STAFF  @map("staff")
+  ONLINE @map("online")
+}
+
+enum WaitlistStatus {
+  WAITING @map("waiting")
+  SEATED  @map("seated")
+  LEFT    @map("left")
+}
+
 // ─────────────────────── Tenant + domain ───────────────────────
 
 model Restaurant {
@@ -127,6 +145,8 @@ model Restaurant {
   payments       Payment[]
   customers      Customer[]
   promoCodes     PromoCode[]
+  reservations   Reservation[]
+  waitlist       WaitlistEntry[]
 
   @@map("restaurants")
 }
@@ -264,9 +284,10 @@ model Table {
   isActive     Boolean     @default(true) @map("is_active")
   createdAt    DateTime    @default(now()) @map("created_at")
 
-  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  orders     Order[]
-  payments   Payment[]
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders       Order[]
+  payments     Payment[]
+  reservations Reservation[]
 
   @@unique([restaurantId, number])
   @@map("tables")
@@ -535,4 +556,42 @@ model PromoCode {
 
   @@unique([restaurantId, code])
   @@map("promo_codes")
+}
+
+model Reservation {
+  id           Int               @id @default(autoincrement())
+  restaurantId Int               @map("restaurant_id")
+  tableId      Int?              @map("table_id")
+  name         String
+  phone        String?
+  partySize    Int               @map("party_size")
+  at           DateTime
+  status       ReservationStatus @default(BOOKED)
+  source       ReservationSource @default(STAFF)
+  notes        String?
+  createdAt    DateTime          @default(now()) @map("created_at")
+  updatedAt    DateTime          @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table      Table?     @relation(fields: [tableId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId, at])
+  @@map("reservations")
+}
+
+model WaitlistEntry {
+  id            Int            @id @default(autoincrement())
+  restaurantId  Int            @map("restaurant_id")
+  name          String
+  phone         String?
+  partySize     Int            @map("party_size")
+  quotedMinutes Int?           @map("quoted_minutes")
+  status        WaitlistStatus @default(WAITING)
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, status])
+  @@map("waitlist_entries")
 }

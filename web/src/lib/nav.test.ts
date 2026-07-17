@@ -10,6 +10,7 @@ describe('visibleSections', () => {
       'tables',
       'kitchen',
       'floor',
+      'reservations',
       'staff',
       'orders',
       'customers',
@@ -24,6 +25,7 @@ describe('visibleSections', () => {
       'tables',
       'kitchen',
       'floor',
+      'reservations',
       'staff',
       'orders',
       'customers',
@@ -35,8 +37,8 @@ describe('visibleSections', () => {
     expect(keys('CHEF')).toEqual(['kitchen']);
   });
 
-  it('shows the server tables, kitchen, and floor', () => {
-    expect(keys('SERVER')).toEqual(['tables', 'kitchen', 'floor']);
+  it('shows the server tables, kitchen, floor, and reservations', () => {
+    expect(keys('SERVER')).toEqual(['tables', 'kitchen', 'floor', 'reservations']);
   });
 });
 
