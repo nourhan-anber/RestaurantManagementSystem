@@ -1,5 +1,21 @@
 import type { PrismaClient } from '@/generated/prisma/client';
-import { safeAverage } from '@/lib/reports';
+import type { OrderType, PaymentMethod } from '@/generated/prisma/enums';
+import { rankItemsAndCategories, safeAverage } from '@/lib/reports';
+
+export interface DateRange {
+  gte?: Date;
+  lte?: Date;
+}
+
+function createdAtFilter(range?: DateRange) {
+  if (!range || (!range.gte && !range.lte)) return {};
+  return { createdAt: { ...(range.gte ? { gte: range.gte } : {}), ...(range.lte ? { lte: range.lte } : {}) } };
+}
+
+/** Where clause for settled (delivered) orders, tenant-scoped and optionally ranged. */
+function deliveredWhere(restaurantId: number, range?: DateRange) {
+  return { restaurantId, status: 'DELIVERED' as const, ...createdAtFilter(range) };
+}
 
 export interface SalesSummary {
   revenue: number; // net of tax
@@ -9,18 +25,16 @@ export interface SalesSummary {
   itemsSold: number;
 }
 
-/** Revenue/tax/orders/items from settled (delivered) orders, scoped to the tenant. */
-export async function salesSummary(db: PrismaClient, restaurantId: number): Promise<SalesSummary> {
+/** Revenue/tax/orders/items from settled (delivered) orders in the range. */
+export async function salesSummary(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+): Promise<SalesSummary> {
+  const where = deliveredWhere(restaurantId, range);
   const [orderAgg, itemAgg] = await Promise.all([
-    db.order.aggregate({
-      where: { restaurantId, status: 'DELIVERED' },
-      _sum: { subtotal: true, taxAmount: true },
-      _count: { _all: true },
-    }),
-    db.orderItem.aggregate({
-      where: { order: { restaurantId, status: 'DELIVERED' } },
-      _sum: { quantity: true },
-    }),
+    db.order.aggregate({ where, _sum: { subtotal: true, taxAmount: true }, _count: { _all: true } }),
+    db.orderItem.aggregate({ where: { order: where }, _sum: { quantity: true } }),
   ]);
 
   const revenue = Number(orderAgg._sum.subtotal ?? 0);
@@ -35,17 +49,162 @@ export async function salesSummary(db: PrismaClient, restaurantId: number): Prom
   };
 }
 
+export interface RevenueRow {
+  createdAt: Date;
+  subtotal: number;
+  taxAmount: number;
+  total: number;
+}
+
+/** Raw delivered-order rows for time-series bucketing (see lib/reports.bucketRevenueByDay). */
+export async function revenueRows(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+): Promise<RevenueRow[]> {
+  const rows = await db.order.findMany({
+    where: deliveredWhere(restaurantId, range),
+    select: { createdAt: true, subtotal: true, taxAmount: true, total: true },
+  });
+  return rows.map((r) => ({
+    createdAt: r.createdAt,
+    subtotal: Number(r.subtotal),
+    taxAmount: Number(r.taxAmount),
+    total: Number(r.total),
+  }));
+}
+
+export interface TypeBreakdown {
+  orderType: OrderType;
+  orders: number;
+  revenue: number;
+  tax: number;
+  total: number;
+}
+
+/** Delivered sales split by fulfillment type. */
+export async function salesByType(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+): Promise<TypeBreakdown[]> {
+  const grouped = await db.order.groupBy({
+    by: ['orderType'],
+    where: deliveredWhere(restaurantId, range),
+    _sum: { subtotal: true, taxAmount: true, total: true },
+    _count: { _all: true },
+  });
+  return grouped
+    .map((g) => ({
+      orderType: g.orderType,
+      orders: g._count._all,
+      revenue: Number(g._sum.subtotal ?? 0),
+      tax: Number(g._sum.taxAmount ?? 0),
+      total: Number(g._sum.total ?? 0),
+    }))
+    .sort((a, b) => b.total - a.total);
+}
+
+export interface MethodBreakdown {
+  method: PaymentMethod;
+  count: number;
+  amount: number;
+  tax: number;
+}
+
+/** Payments collected (settlement-time) split by method — SUCCEEDED only. */
+export async function salesByPaymentMethod(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+): Promise<MethodBreakdown[]> {
+  const grouped = await db.payment.groupBy({
+    by: ['method'],
+    where: { restaurantId, status: 'SUCCEEDED', ...createdAtFilter(range) },
+    _sum: { amount: true, taxAmount: true },
+    _count: { _all: true },
+  });
+  return grouped
+    .map((g) => ({
+      method: g.method,
+      count: g._count._all,
+      amount: Number(g._sum.amount ?? 0),
+      tax: Number(g._sum.taxAmount ?? 0),
+    }))
+    .sort((a, b) => b.amount - a.amount);
+}
+
+/** Revenue-ranked top menu items and categories over delivered orders in the range. */
+export async function topItemsAndCategories(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+  limit = 5,
+) {
+  const lines = await db.orderItem.findMany({
+    where: { order: deliveredWhere(restaurantId, range) },
+    select: {
+      quantity: true,
+      unitPrice: true,
+      menuItem: { select: { name: true, category: { select: { name: true } } } },
+    },
+  });
+  const { items, categories } = rankItemsAndCategories(
+    lines.map((l) => ({
+      name: l.menuItem.name,
+      categoryName: l.menuItem.category.name,
+      quantity: l.quantity,
+      unitPrice: Number(l.unitPrice),
+    })),
+  );
+  return { items: items.slice(0, limit), categories: categories.slice(0, limit) };
+}
+
+export interface TopCustomer {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  orders: number;
+  spend: number;
+}
+
+/** Top customers by total spend over delivered orders in the range. */
+export async function topCustomers(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+  limit = 5,
+): Promise<TopCustomer[]> {
+  const grouped = await db.order.groupBy({
+    by: ['customerId'],
+    where: { ...deliveredWhere(restaurantId, range), customerId: { not: null } },
+    _sum: { total: true },
+    _count: { _all: true },
+    orderBy: { _sum: { total: 'desc' } },
+    take: limit,
+  });
+  const ids = grouped.map((g) => g.customerId).filter((x): x is number => x != null);
+  const customers = await db.customer.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, name: true, phone: true },
+  });
+  const byId = new Map(customers.map((c) => [c.id, c]));
+  return grouped.map((g) => ({
+    id: g.customerId as number,
+    name: byId.get(g.customerId as number)?.name ?? null,
+    phone: byId.get(g.customerId as number)?.phone ?? null,
+    orders: g._count._all,
+    spend: Number(g._sum.total ?? 0),
+  }));
+}
+
 export interface TopItem {
   name: string;
   quantity: number;
 }
 
-/** Best-selling menu items by quantity across settled orders. */
-export async function topItems(
-  db: PrismaClient,
-  restaurantId: number,
-  limit = 5,
-): Promise<TopItem[]> {
+/** Best-selling menu items by quantity across settled orders (legacy; kept for tests). */
+export async function topItems(db: PrismaClient, restaurantId: number, limit = 5): Promise<TopItem[]> {
   const grouped = await db.orderItem.groupBy({
     by: ['menuItemId'],
     where: { order: { restaurantId, status: 'DELIVERED' } },
@@ -53,13 +212,11 @@ export async function topItems(
     orderBy: { _sum: { quantity: 'desc' } },
     take: limit,
   });
-
   const names = await db.menuItem.findMany({
     where: { id: { in: grouped.map((g) => g.menuItemId) } },
     select: { id: true, name: true },
   });
   const nameById = new Map(names.map((n) => [n.id, n.name]));
-
   return grouped.map((g) => ({
     name: nameById.get(g.menuItemId) ?? 'Unknown',
     quantity: g._sum.quantity ?? 0,

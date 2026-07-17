@@ -1,8 +1,16 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
-import { placeOrder } from './orders';
-import { salesSummary, topItems } from './reports';
+import { placeOnlineOrder, placeOrder } from './orders';
+import {
+  revenueRows,
+  salesByPaymentMethod,
+  salesByType,
+  salesSummary,
+  topCustomers,
+  topItems,
+  topItemsAndCategories,
+} from './reports';
 
 const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
 const db = new PrismaClient({ adapter });
@@ -82,5 +90,75 @@ describe('reports', () => {
     expect(summary.revenue).toBe(20); // net, excludes tax
     expect(summary.taxCollected).toBe(2.6);
     expect(summary.avgOrder).toBe(20);
+  });
+});
+
+describe('reports breakdowns + range', () => {
+  async function scenario() {
+    const r = await db.restaurant.create({ data: { name: 'Bella', slug: 'bella' } });
+    const table = await db.table.create({ data: { restaurantId: r.id, number: 1 } });
+    const mains = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'Mains', position: 0 } });
+    const sides = await db.menuCategory.create({ data: { restaurantId: r.id, name: 'Sides', position: 1 } });
+    const burger = await db.menuItem.create({ data: { restaurantId: r.id, categoryId: mains.id, name: 'Burger', price: '10.00' } });
+    const fries = await db.menuItem.create({ data: { restaurantId: r.id, categoryId: sides.id, name: 'Fries', price: '5.00' } });
+
+    // Dine-in: 2 burgers = 20 (no customer).
+    const dine = await placeOrder(db, r.id, table.id, [{ menuItemId: burger.id, quantity: 2 }]);
+    // Pickup: 3 fries = 15 (customer Ada).
+    const pickup = await placeOnlineOrder(db, r.id, { kind: 'pickup', customerName: 'Ada', customerPhone: '416-555-0111' }, [{ menuItemId: fries.id, quantity: 3 }]);
+    // Delivery: 1 burger = 10 (customer Bob).
+    const deliv = await placeOnlineOrder(db, r.id, { kind: 'delivery', customerName: 'Bob', customerPhone: '416-555-0222', deliveryAddress: '1 Main St' }, [{ menuItemId: burger.id, quantity: 1 }]);
+    for (const o of [dine, pickup, deliv]) {
+      if (!o.ok) throw new Error('expected ok');
+      await db.order.update({ where: { id: o.orderId }, data: { status: 'DELIVERED' } });
+    }
+    // Payments (settlement records).
+    await db.payment.create({ data: { restaurantId: r.id, amount: '20.00', method: 'CASH', status: 'SUCCEEDED' } });
+    await db.payment.create({ data: { restaurantId: r.id, amount: '15.00', method: 'CARD', status: 'SUCCEEDED' } });
+    await db.payment.create({ data: { restaurantId: r.id, amount: '99.00', method: 'ONLINE', status: 'PENDING' } }); // ignored
+    return { r };
+  }
+
+  it('breaks down by type, payment method, top items/categories, and top customers', async () => {
+    const { r } = await scenario();
+
+    const byType = await salesByType(db, r.id);
+    expect(byType.map((t) => [t.orderType, t.revenue])).toEqual([
+      ['DINE_IN', 20],
+      ['PICKUP', 15],
+      ['DELIVERY', 10],
+    ]);
+
+    const byMethod = await salesByPaymentMethod(db, r.id);
+    expect(byMethod.map((m) => [m.method, m.amount])).toEqual([
+      ['CASH', 20],
+      ['CARD', 15],
+    ]); // PENDING online payment excluded
+
+    const { items, categories } = await topItemsAndCategories(db, r.id);
+    expect(items).toEqual([
+      { name: 'Burger', quantity: 3, revenue: 30 },
+      { name: 'Fries', quantity: 3, revenue: 15 },
+    ]);
+    expect(categories).toEqual([
+      { name: 'Mains', quantity: 3, revenue: 30 },
+      { name: 'Sides', quantity: 3, revenue: 15 },
+    ]);
+
+    const customers = await topCustomers(db, r.id);
+    expect(customers.map((c) => [c.name, c.spend])).toEqual([
+      ['Ada', 15],
+      ['Bob', 10],
+    ]);
+
+    expect(await revenueRows(db, r.id)).toHaveLength(3);
+  });
+
+  it('honors the date range', async () => {
+    const { r } = await scenario();
+    const future = { gte: new Date('2099-01-01T00:00:00Z') };
+    expect((await salesSummary(db, r.id, future)).orders).toBe(0);
+    expect(await salesByType(db, r.id, future)).toEqual([]);
+    expect(await revenueRows(db, r.id, future)).toEqual([]);
   });
 });
