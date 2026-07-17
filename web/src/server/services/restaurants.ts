@@ -69,6 +69,8 @@ export function updateRestaurantBranding(
       taxRatePercent: tax.ratePercent,
       taxLabel: tax.label,
       taxRegion: tax.region,
+      storefrontTemplate: input.storefrontTemplate ?? 'classic',
+      themeColor: input.themeColor ?? '#d8622d',
     },
   });
 }

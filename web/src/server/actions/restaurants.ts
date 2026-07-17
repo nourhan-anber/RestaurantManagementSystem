@@ -70,6 +70,8 @@ export async function updateBranding(
     taxRegion: optional(formData.get('taxRegion')),
     taxRatePercent: formData.get('taxRatePercent') ?? undefined,
     taxLabel: optional(formData.get('taxLabel')),
+    storefrontTemplate: optional(formData.get('storefrontTemplate')),
+    themeColor: optional(formData.get('themeColor')),
   });
   if (!branding.success) {
     return { error: branding.error.issues[0]?.message ?? 'Invalid input.' };

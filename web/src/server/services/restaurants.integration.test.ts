@@ -152,4 +152,18 @@ describe('branding + opening hours', () => {
     expect(fresh.taxLabel).toBe('City Tax');
     expect(fresh.taxRegion).toBe('custom');
   });
+
+  it('persists the storefront template + accent color', async () => {
+    const { restaurantId } = await provisionRestaurant(db, input);
+    await updateRestaurantBranding(db, restaurantId, {
+      name: 'Bella Vista',
+      timezone: 'America/Toronto',
+      onlineOrderingEnabled: true,
+      storefrontTemplate: 'banner',
+      themeColor: '#1f6f5c',
+    });
+    const fresh = await db.restaurant.findUniqueOrThrow({ where: { id: restaurantId } });
+    expect(fresh.storefrontTemplate).toBe('banner');
+    expect(fresh.themeColor).toBe('#1f6f5c');
+  });
 });

@@ -48,6 +48,8 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
           taxRatePercent: Number(restaurant.taxRatePercent),
           taxLabel: restaurant.taxLabel,
           taxRegion: restaurant.taxRegion,
+          storefrontTemplate: restaurant.storefrontTemplate,
+          themeColor: restaurant.themeColor,
         }}
         hours={hours.map((h) => ({
           dayOfWeek: h.dayOfWeek,

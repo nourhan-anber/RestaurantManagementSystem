@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { DAY_LABELS, minutesToHhmm } from '@/lib/hours';
 import { CA_TAX_PRESETS, CUSTOM_TAX } from '@/lib/tax';
+import { STOREFRONT_TEMPLATES } from '@/lib/storefront';
 import { updateBranding, type BrandingState } from '@/server/actions/restaurants';
 import { ImageUploadField } from '../menu/image-upload-field';
 
@@ -28,6 +29,8 @@ export interface BrandingData {
   taxRatePercent: number;
   taxLabel: string;
   taxRegion: string | null;
+  storefrontTemplate: string;
+  themeColor: string;
 }
 
 const INITIAL: BrandingState = {};
@@ -94,6 +97,48 @@ export function BrandingForm({
 
       <section className="space-y-4 rounded-[var(--radius)] border border-border bg-surface p-5">
         <div>
+          <h2 className="font-display text-lg text-foreground">Storefront look</h2>
+          <p className="mt-1 text-xs text-muted">How your public order page is styled.</p>
+        </div>
+        <div>
+          <Label>Template</Label>
+          <div className="mt-2 grid grid-cols-3 gap-3">
+            {STOREFRONT_TEMPLATES.map((t) => (
+              <label
+                key={t.id}
+                className="cursor-pointer rounded-[var(--radius)] border border-border p-3 text-center transition-colors has-[:checked]:border-ember has-[:checked]:bg-ember/5"
+              >
+                <input
+                  type="radio"
+                  name="storefrontTemplate"
+                  value={t.id}
+                  defaultChecked={restaurant.storefrontTemplate === t.id}
+                  className="sr-only"
+                />
+                <TemplateThumb id={t.id} />
+                <span className="mt-2 block text-sm font-medium text-foreground">{t.label}</span>
+                <span className="mt-0.5 block text-[0.7rem] leading-tight text-muted">{t.description}</span>
+              </label>
+            ))}
+          </div>
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="themeColor">Accent color</Label>
+          <div className="flex items-center gap-3">
+            <input
+              id="themeColor"
+              name="themeColor"
+              type="color"
+              defaultValue={restaurant.themeColor}
+              className="h-10 w-16 cursor-pointer rounded-[var(--radius)] border border-border bg-surface"
+            />
+            <span className="text-xs text-muted">Buttons, badges, and highlights on your storefront.</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4 rounded-[var(--radius)] border border-border bg-surface p-5">
+        <div>
           <h2 className="font-display text-lg text-foreground">Taxes</h2>
           <p className="mt-1 text-xs text-muted">Sales tax added on top of item prices at checkout.</p>
         </div>
@@ -151,5 +196,28 @@ export function BrandingForm({
         {pending ? 'Saving…' : 'Save changes'}
       </Button>
     </form>
+  );
+}
+
+/** A tiny schematic of each storefront template for the picker. */
+function TemplateThumb({ id }: { id: string }) {
+  const line = <span className="block h-1 rounded bg-muted/40" />;
+  return (
+    <div className="mx-auto h-14 w-full max-w-[5rem] overflow-hidden rounded border border-border bg-background p-1.5">
+      {id === 'banner' ? (
+        <span className="mb-1 block h-3 rounded bg-ember" />
+      ) : id === 'hero' ? (
+        <span className="mx-auto mb-1 block size-3 rounded-full bg-ember" />
+      ) : (
+        <span className="mb-1 flex items-center gap-1">
+          <span className="size-2 rounded-full bg-ember" />
+          <span className="h-1.5 w-6 rounded bg-muted/40" />
+        </span>
+      )}
+      <div className="space-y-1">
+        {line}
+        {line}
+      </div>
+    </div>
   );
 }

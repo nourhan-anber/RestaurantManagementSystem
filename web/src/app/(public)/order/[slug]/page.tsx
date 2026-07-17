@@ -85,6 +85,8 @@ export default async function OrderPage({
       taxEnabled={restaurant.taxEnabled}
       taxRatePercent={Number(restaurant.taxRatePercent)}
       taxLabel={restaurant.taxLabel}
+      template={restaurant.storefrontTemplate}
+      themeColor={restaurant.themeColor}
       menu={menu}
     />
   );

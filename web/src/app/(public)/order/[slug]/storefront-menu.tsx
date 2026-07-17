@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type CSSProperties } from 'react';
 import Image from 'next/image';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,6 +10,7 @@ import { DIETARY_LABELS } from '@/lib/dietary';
 import { formatMoney } from '@/lib/format';
 import { DAY_LABELS, minutesToHhmm, type DayHours } from '@/lib/hours';
 import { computeTax } from '@/lib/tax';
+import { darkenHex } from '@/lib/storefront';
 import { useCart } from '@/stores/cart';
 import { ItemCustomizer } from '../../dine/[slug]/[tableNumber]/item-customizer';
 import type { CustomerMenuItem } from '../../dine/[slug]/[tableNumber]/customer-menu';
@@ -38,6 +39,8 @@ export function StorefrontMenu({
   taxEnabled,
   taxRatePercent,
   taxLabel,
+  template,
+  themeColor,
   menu,
 }: {
   slug: string;
@@ -54,6 +57,8 @@ export function StorefrontMenu({
   taxEnabled: boolean;
   taxRatePercent: number;
   taxLabel: string;
+  template: string;
+  themeColor: string;
   menu: CustomerMenuItem[];
 }) {
   const lines = useCart((s) => s.lines);
@@ -85,6 +90,13 @@ export function StorefrontMenu({
   // Tax applies to the food subtotal only (delivery fee is not taxed).
   const { taxAmount } = computeTax(subtotal, taxRatePercent, taxEnabled);
   const grandTotal = subtotal + taxAmount + deliveryFee;
+
+  // Recolor the whole storefront by overriding the accent CSS variables; Tailwind's
+  // opacity variants (bg-ember/10, …) resolve against them via color-mix.
+  const themeStyle = {
+    '--color-ember': themeColor,
+    '--color-ember-600': darkenHex(themeColor),
+  } as CSSProperties;
 
   const inCart = (itemId: number) =>
     lines.filter((l) => l.menuItemId === itemId).reduce((s, l) => s + l.quantity, 0);
@@ -192,7 +204,7 @@ export function StorefrontMenu({
 
   if (status === 'success') {
     return (
-      <main className="flex min-h-dvh items-center justify-center px-6 text-center">
+      <main style={themeStyle} className="flex min-h-dvh items-center justify-center px-6 text-center">
         <div>
           <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-pine text-2xl text-linen">✓</div>
           <h1 className="mt-5 font-display text-2xl text-foreground">Order placed</h1>
@@ -218,54 +230,91 @@ export function StorefrontMenu({
     );
   }
 
-  return (
-    <div className="min-h-dvh pb-24">
-      <header className="border-b border-border bg-background/90 backdrop-blur">
-        <div className="flex items-center justify-between gap-4 px-5 py-4">
-          <div className="flex min-w-0 items-center gap-3">
-            {logoUrl ? (
-              <Image
-                src={logoUrl}
-                alt=""
-                width={48}
-                height={48}
-                className="size-12 shrink-0 rounded-full object-cover"
-                unoptimized
-              />
-            ) : null}
-            <div className="min-w-0">
-              <p className="truncate font-display text-lg font-semibold text-foreground">{restaurantName}</p>
-              <div className="flex items-center gap-2 text-xs">
-                <span
-                  className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium ${
-                    open ? 'bg-pine/10 text-pine dark:bg-linen/10 dark:text-linen' : 'bg-ember/10 text-ember-600'
-                  }`}
-                >
-                  <span className={`size-1.5 rounded-full ${open ? 'bg-pine dark:bg-linen' : 'bg-ember'}`} />
-                  {open ? 'Open now' : 'Closed'}
-                </span>
-                {hours.length > 0 ? (
-                  <button className="text-muted underline hover:text-foreground" onClick={() => setHoursOpen((v) => !v)}>
-                    Hours
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
-          <Button variant="secondary" size="sm" onClick={() => setCartOpen(true)}>
-            Cart{count > 0 ? ` · ${count}` : ''}
-          </Button>
-        </div>
+  const openBadge = (
+    <span
+      className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
+        open ? 'bg-pine/10 text-pine dark:bg-linen/10 dark:text-linen' : 'bg-ember/10 text-ember-600'
+      }`}
+    >
+      <span className={`size-1.5 rounded-full ${open ? 'bg-pine dark:bg-linen' : 'bg-ember'}`} />
+      {open ? 'Open now' : 'Closed'}
+    </span>
+  );
+  const hoursToggle =
+    hours.length > 0 ? (
+      <button className="text-xs text-muted underline hover:text-foreground" onClick={() => setHoursOpen((v) => !v)}>
+        Hours
+      </button>
+    ) : null;
+  const cartButton = (
+    <Button variant="secondary" size="sm" onClick={() => setCartOpen(true)}>
+      Cart{count > 0 ? ` · ${count}` : ''}
+    </Button>
+  );
+  const contactRow =
+    description || phone || address ? (
+      <div className="text-xs text-muted">
+        {description ? <p className="text-foreground/80">{description}</p> : null}
+        <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
+          {address ? <span>📍 {address}</span> : null}
+          {phone ? <span>📞 {phone}</span> : null}
+        </p>
+      </div>
+    ) : null;
 
-        {description || phone || address ? (
-          <div className="px-5 pb-3 text-xs text-muted">
-            {description ? <p className="text-foreground/80">{description}</p> : null}
-            <p className="mt-1 flex flex-wrap gap-x-3 gap-y-0.5">
-              {address ? <span>📍 {address}</span> : null}
-              {phone ? <span>📞 {phone}</span> : null}
-            </p>
+  return (
+    <div style={themeStyle} className="min-h-dvh pb-24">
+      <header className="border-b border-border bg-background/90 backdrop-blur">
+        {template === 'banner' ? (
+          <>
+            <div className="flex items-center justify-between gap-4 bg-ember px-5 py-5 text-linen">
+              <div className="flex min-w-0 items-center gap-3">
+                {logoUrl ? (
+                  <Image src={logoUrl} alt="" width={48} height={48} className="size-12 shrink-0 rounded-full object-cover" unoptimized />
+                ) : null}
+                <p className="truncate font-display text-xl font-semibold">{restaurantName}</p>
+              </div>
+              {cartButton}
+            </div>
+            <div className="flex items-center gap-2 px-5 pt-3">
+              {openBadge}
+              {hoursToggle}
+            </div>
+            {contactRow ? <div className="px-5 pb-3 pt-2">{contactRow}</div> : null}
+          </>
+        ) : template === 'hero' ? (
+          <div className="relative px-5 py-6 text-center">
+            <div className="absolute right-5 top-4">{cartButton}</div>
+            {logoUrl ? (
+              <Image src={logoUrl} alt="" width={72} height={72} className="mx-auto size-16 rounded-full object-cover" unoptimized />
+            ) : null}
+            <p className="mt-3 font-display text-2xl font-semibold text-foreground">{restaurantName}</p>
+            <div className="mt-2 flex items-center justify-center gap-2">
+              {openBadge}
+              {hoursToggle}
+            </div>
+            {contactRow ? <div className="mx-auto mt-2 max-w-md">{contactRow}</div> : null}
           </div>
-        ) : null}
+        ) : (
+          <>
+            <div className="flex items-center justify-between gap-4 px-5 py-4">
+              <div className="flex min-w-0 items-center gap-3">
+                {logoUrl ? (
+                  <Image src={logoUrl} alt="" width={48} height={48} className="size-12 shrink-0 rounded-full object-cover" unoptimized />
+                ) : null}
+                <div className="min-w-0">
+                  <p className="truncate font-display text-lg font-semibold text-foreground">{restaurantName}</p>
+                  <div className="flex items-center gap-2">
+                    {openBadge}
+                    {hoursToggle}
+                  </div>
+                </div>
+              </div>
+              {cartButton}
+            </div>
+            {contactRow ? <div className="px-5 pb-3">{contactRow}</div> : null}
+          </>
+        )}
 
         {hoursOpen ? (
           <div className="border-t border-border px-5 py-3">

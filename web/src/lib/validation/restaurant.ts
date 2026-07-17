@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isStorefrontTemplate, isValidHexColor } from '@/lib/storefront';
 
 export const createRestaurantSchema = z.object({
   name: z.string().trim().min(2, 'Restaurant name is required.').max(120),
@@ -27,6 +28,9 @@ export const brandingSchema = z.object({
     .max(30, 'Tax rate looks too high.')
     .optional(),
   taxLabel: z.string().trim().max(40).optional(),
+  // Storefront look.
+  storefrontTemplate: z.string().trim().refine(isStorefrontTemplate, 'Pick a valid template.').optional(),
+  themeColor: z.string().trim().refine(isValidHexColor, 'Enter a valid hex color.').optional(),
 });
 
 export type BrandingInput = z.infer<typeof brandingSchema>;

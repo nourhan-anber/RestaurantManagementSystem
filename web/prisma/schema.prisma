@@ -102,6 +102,8 @@ model Restaurant {
   taxRatePercent        Decimal  @default(0) @db.Decimal(6, 4) @map("tax_rate_percent")
   taxLabel              String   @default("Tax") @map("tax_label")
   taxRegion             String?  @map("tax_region")
+  storefrontTemplate    String   @default("classic") @map("storefront_template")
+  themeColor            String   @default("#d8622d") @map("theme_color")
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
 

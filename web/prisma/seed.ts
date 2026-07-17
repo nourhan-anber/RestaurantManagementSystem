@@ -157,6 +157,8 @@ async function main() {
     taxRegion: 'CA-ON',
     taxRatePercent: 13,
     taxLabel: 'HST',
+    storefrontTemplate: 'hero',
+    themeColor: '#c2410c',
   };
   const restaurant = await db.restaurant.upsert({
     where: { slug: 'bella-vista' },
