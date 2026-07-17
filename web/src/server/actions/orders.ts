@@ -42,6 +42,7 @@ export async function settleTableBill(
   const parsed = settleBillSchema.safeParse({
     method: formData.get('method'),
     transactionId: (formData.get('transactionId') as string)?.trim() || undefined,
+    tip: formData.get('tip'),
   });
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? 'Invalid input.' };

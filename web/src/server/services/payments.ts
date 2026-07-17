@@ -19,7 +19,7 @@ export async function recordOnlinePayment(
 ): Promise<OnlinePaymentResult> {
   const order = await db.order.findUnique({
     where: { id: input.orderId },
-    select: { id: true, restaurantId: true, orderType: true, taxAmount: true },
+    select: { id: true, restaurantId: true, orderType: true, taxAmount: true, tipAmount: true },
   });
   if (!order) return { ok: false, reason: 'order_not_found' };
 
@@ -36,6 +36,7 @@ export async function recordOnlinePayment(
       status: 'SUCCEEDED',
       amount: input.amountCents / 100,
       taxAmount: order.taxAmount,
+      tipAmount: order.tipAmount,
       currency: input.currency,
       stripePaymentIntentId: input.stripePaymentIntentId,
     },

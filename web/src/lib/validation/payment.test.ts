@@ -14,6 +14,17 @@ describe('settleBillSchema', () => {
   it('rejects an unknown method', () => {
     expect(settleBillSchema.safeParse({ method: 'CRYPTO' }).success).toBe(false);
   });
+
+  it('coerces a tip and treats blank as no tip', () => {
+    const withTip = settleBillSchema.safeParse({ method: 'CASH', tip: '5.50' });
+    expect(withTip.success && withTip.data.tip).toBe(5.5);
+    const blank = settleBillSchema.safeParse({ method: 'CASH', tip: '' });
+    expect(blank.success && blank.data.tip).toBeUndefined();
+  });
+
+  it('rejects a negative tip', () => {
+    expect(settleBillSchema.safeParse({ method: 'CASH', tip: '-1' }).success).toBe(false);
+  });
 });
 
 describe('refundSchema', () => {

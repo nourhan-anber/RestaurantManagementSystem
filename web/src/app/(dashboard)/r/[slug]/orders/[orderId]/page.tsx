@@ -125,6 +125,20 @@ export default async function OrderDetailPage({
             <span className="text-foreground">Total</span>
             <span className="tabular-nums text-foreground">{formatMoney(Number(order.total))}</span>
           </div>
+          {Number(order.tipAmount) > 0 ? (
+            <>
+              <div className="flex justify-between">
+                <span className="text-muted">Tip</span>
+                <span className="tabular-nums text-foreground">{formatMoney(Number(order.tipAmount))}</span>
+              </div>
+              <div className="flex justify-between border-t border-border pt-1 font-medium">
+                <span className="text-foreground">Charged</span>
+                <span className="tabular-nums text-foreground">
+                  {formatMoney(Number(order.total) + Number(order.tipAmount))}
+                </span>
+              </div>
+            </>
+          ) : null}
         </div>
       </section>
 

@@ -10,6 +10,7 @@ import {
   salesByPaymentMethod,
   salesByType,
   salesSummary,
+  tipsTotal,
   topCustomers,
   topItemsAndCategories,
 } from '@/server/services/reports';
@@ -51,7 +52,7 @@ export default async function ReportsPage({
   const toStr = to ?? dayString(now);
   const range = parseDateRange(fromStr, toStr);
 
-  const [summary, rows, byType, byMethod, top, customers, refunds] = await Promise.all([
+  const [summary, rows, byType, byMethod, top, customers, refunds, tips] = await Promise.all([
     salesSummary(db, restaurant.id, range),
     revenueRows(db, restaurant.id, range),
     salesByType(db, restaurant.id, range),
@@ -59,6 +60,7 @@ export default async function ReportsPage({
     topItemsAndCategories(db, restaurant.id, range),
     topCustomers(db, restaurant.id, range),
     refundsTotal(db, restaurant.id, range),
+    tipsTotal(db, restaurant.id, range),
   ]);
 
   const byDay = bucketRevenueByDay(rows, restaurant.timezone);
@@ -70,6 +72,7 @@ export default async function ReportsPage({
     { label: 'Orders', value: String(summary.orders) },
     { label: 'Avg order', value: formatMoney(summary.avgOrder) },
     { label: 'Items sold', value: String(summary.itemsSold) },
+    ...(tips > 0 ? [{ label: 'Tips collected', value: formatMoney(tips) }] : []),
     ...(refunds > 0 ? [{ label: 'Refunds', value: formatMoney(refunds) }] : []),
   ];
 

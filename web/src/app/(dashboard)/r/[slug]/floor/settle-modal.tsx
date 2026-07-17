@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { formatMoney } from '@/lib/format';
+import { computeTip, TIP_PRESETS } from '@/lib/tip';
 import {
   requiresReference,
   SETTLE_METHODS,
@@ -32,6 +33,13 @@ export function SettleBill({
 }) {
   const [open, setOpen] = useState(false);
   const [method, setMethod] = useState<SettleMethod>('CARD');
+  // Tip: a preset percentage of the bill, or a custom dollar amount when preset is null.
+  const [tipPreset, setTipPreset] = useState<number | null>(null);
+  const [customTip, setCustomTip] = useState('');
+  const presetTip = tipPreset != null ? computeTip(amount, tipPreset) : 0;
+  const tip = tipPreset != null ? presetTip : Math.max(0, Number(customTip) || 0);
+  const grandTotal = Math.round((amount + tip) * 100) / 100;
+
   const [state, formAction, pending] = useActionState(
     settleTableBill.bind(null, slug, tableId),
     INITIAL,
@@ -104,6 +112,44 @@ export function SettleBill({
                 </div>
               </div>
 
+              <div className="space-y-1.5">
+                <Label>Tip</Label>
+                <div className="flex gap-2">
+                  {TIP_PRESETS.map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => { setTipPreset(pct); setCustomTip(''); }}
+                      className={`flex-1 rounded-[var(--radius)] border px-2 py-2 text-center text-sm ${
+                        tipPreset === pct ? 'border-ember text-foreground' : 'border-border text-muted'
+                      }`}
+                    >
+                      {pct}%
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => setTipPreset(null)}
+                    className={`flex-1 rounded-[var(--radius)] border px-2 py-2 text-center text-sm ${
+                      tipPreset === null ? 'border-ember text-foreground' : 'border-border text-muted'
+                    }`}
+                  >
+                    Custom
+                  </button>
+                </div>
+                {tipPreset === null ? (
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    inputMode="decimal"
+                    value={customTip}
+                    onChange={(e) => setCustomTip(e.target.value)}
+                    placeholder="Tip amount"
+                  />
+                ) : null}
+              </div>
+
               {requiresReference(method) ? (
                 <div className="space-y-1.5">
                   <Label htmlFor="transactionId">Transaction id</Label>
@@ -111,11 +157,26 @@ export function SettleBill({
                 </div>
               ) : null}
 
+              <input type="hidden" name="tip" value={tip} />
+
+              {tip > 0 ? (
+                <div className="space-y-1 border-t border-border pt-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted">Tip</span>
+                    <span className="tabular-nums text-foreground">{formatMoney(tip)}</span>
+                  </div>
+                  <div className="flex justify-between font-medium">
+                    <span className="text-foreground">Charge</span>
+                    <span className="tabular-nums text-foreground">{formatMoney(grandTotal)}</span>
+                  </div>
+                </div>
+              ) : null}
+
               {state.error ? <p role="alert" className="text-sm text-ember-600">{state.error}</p> : null}
 
               <div className="flex gap-2">
                 <Button type="submit" disabled={pending}>
-                  {pending ? 'Settling…' : 'Mark paid'}
+                  {pending ? 'Settling…' : `Mark paid · ${formatMoney(grandTotal)}`}
                 </Button>
                 <Button type="button" variant="ghost" onClick={() => setOpen(false)}>
                   Cancel

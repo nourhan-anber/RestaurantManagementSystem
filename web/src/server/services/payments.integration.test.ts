@@ -84,6 +84,32 @@ describe('recordOnlinePayment', () => {
     expect(Number(payment.taxAmount)).toBe(2.6);
   });
 
+  it('records the order tip on the online payment (total stays food+tax)', async () => {
+    const { r, item } = await fixture();
+    const placed = await placeOnlineOrder(
+      db,
+      r.id,
+      { kind: 'pickup', customerName: 'Sam', customerPhone: '555-0100' },
+      [{ menuItemId: item.id, quantity: 2 }],
+      { tip: 3 },
+    );
+    if (!placed.ok) throw new Error('expected ok');
+    const order = await db.order.findUniqueOrThrow({ where: { id: placed.orderId } });
+    expect(Number(order.tipAmount)).toBe(3);
+    expect(Number(order.total)).toBe(20);
+
+    // Stripe charged subtotal 20 + tip 3 = 23.
+    await recordOnlinePayment(db, {
+      orderId: placed.orderId,
+      stripePaymentIntentId: 'pi_tip',
+      amountCents: 2300,
+      currency: 'usd',
+    });
+    const payment = await db.payment.findFirstOrThrow({ where: { orderId: placed.orderId } });
+    expect(Number(payment.amount)).toBe(23);
+    expect(Number(payment.tipAmount)).toBe(3);
+  });
+
   it('dispatches the courier for a paid delivery order', async () => {
     const { r, item } = await fixture();
     const placed = await placeOnlineOrder(

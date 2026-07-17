@@ -10,6 +10,7 @@ import { DIETARY_LABELS } from '@/lib/dietary';
 import { formatMoney } from '@/lib/format';
 import { DAY_LABELS, minutesToHhmm, type DayHours } from '@/lib/hours';
 import { computeTax } from '@/lib/tax';
+import { computeTip, TIP_PRESETS } from '@/lib/tip';
 import { darkenHex, DEFAULT_THEME_COLOR } from '@/lib/storefront';
 import { orderableSlots } from '@/lib/schedule';
 import { useCart } from '@/stores/cart';
@@ -107,6 +108,8 @@ export function StorefrontMenu({
   const [quote, setQuote] = useState<Quote | null>(null);
   const [trackingUrl, setTrackingUrl] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
+  const [tipPreset, setTipPreset] = useState<number | null>(null);
+  const [customTip, setCustomTip] = useState('');
   // '' = as soon as possible; otherwise a scheduled slot's ISO instant.
   const [whenSlot, setWhenSlot] = useState('');
   const scheduleSlots = useMemo(() => orderableSlots(hours, new Date(), timeZone), [hours, timeZone]);
@@ -121,7 +124,10 @@ export function StorefrontMenu({
   const deliveryFee = orderType === 'DELIVERY' ? (quote?.fee ?? 0) : 0;
   // Tax applies to the food subtotal only (delivery fee is not taxed).
   const { taxAmount } = computeTax(subtotal, taxRatePercent, taxEnabled);
-  const grandTotal = subtotal + taxAmount + deliveryFee;
+  // Gratuity: a preset percentage of the food+tax total, or a custom dollar amount.
+  const tipBase = subtotal + taxAmount;
+  const tip = tipPreset != null ? computeTip(tipBase, tipPreset) : Math.max(0, Number(customTip) || 0);
+  const grandTotal = subtotal + taxAmount + deliveryFee + tip;
 
   // Recolor the whole storefront by overriding the accent CSS variables; Tailwind's
   // opacity variants (bg-ember/10, …) resolve against them via color-mix.
@@ -208,6 +214,7 @@ export function StorefrontMenu({
           deliveryNotes: orderType === 'DELIVERY' ? deliveryNotes.trim() || undefined : undefined,
           requestedTime: effectiveWhen || undefined,
           payOnline: onlinePayment,
+          tip: tip > 0 ? tip : undefined,
           items: lines.map((l) => ({
             menuItemId: l.menuItemId,
             quantity: l.quantity,
@@ -226,7 +233,7 @@ export function StorefrontMenu({
       // Online payment: hand off to Stripe Checkout (we return via ?paid=1).
       if (data.checkoutUrl) {
         clear();
-        window.location.href = data.checkoutUrl;
+        window.location.assign(data.checkoutUrl);
         return;
       }
       setTrackingUrl(data.trackingUrl ?? null);
@@ -644,7 +651,55 @@ export function StorefrontMenu({
             ) : (
               <>
                 <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4 text-sm">
-                  <div className="flex justify-between">
+                  <div>
+                    <span className="text-muted">Add a tip</span>
+                    <div className="mt-2 flex gap-2">
+                      {TIP_PRESETS.map((pct) => (
+                        <button
+                          key={pct}
+                          type="button"
+                          onClick={() => { setTipPreset(pct); setCustomTip(''); }}
+                          className={`flex-1 rounded-[var(--radius)] border px-2 py-2 text-center ${
+                            tipPreset === pct ? 'border-ember text-foreground' : 'border-border text-muted'
+                          }`}
+                        >
+                          {pct}%
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => { setTipPreset(0); setCustomTip(''); }}
+                        className={`flex-1 rounded-[var(--radius)] border px-2 py-2 text-center ${
+                          tipPreset === 0 ? 'border-ember text-foreground' : 'border-border text-muted'
+                        }`}
+                      >
+                        None
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setTipPreset(null)}
+                        className={`flex-1 rounded-[var(--radius)] border px-2 py-2 text-center ${
+                          tipPreset === null ? 'border-ember text-foreground' : 'border-border text-muted'
+                        }`}
+                      >
+                        Custom
+                      </button>
+                    </div>
+                    {tipPreset === null ? (
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        inputMode="decimal"
+                        value={customTip}
+                        onChange={(e) => setCustomTip(e.target.value)}
+                        placeholder="Tip amount"
+                        className="mt-2"
+                      />
+                    ) : null}
+                  </div>
+
+                  <div className="flex justify-between border-t border-border pt-3">
                     <span className="text-muted">Subtotal</span>
                     <span className="tabular-nums text-foreground">{formatMoney(subtotal)}</span>
                   </div>
@@ -658,6 +713,12 @@ export function StorefrontMenu({
                     <div className="flex justify-between">
                       <span className="text-muted">Delivery{quote?.etaMinutes ? ` · ~${quote.etaMinutes} min` : ''}</span>
                       <span className="tabular-nums text-foreground">{formatMoney(deliveryFee)}</span>
+                    </div>
+                  ) : null}
+                  {tip > 0 ? (
+                    <div className="flex justify-between">
+                      <span className="text-muted">Tip</span>
+                      <span className="tabular-nums text-foreground">{formatMoney(tip)}</span>
                     </div>
                   ) : null}
                   <div className="flex justify-between border-t border-border pt-3 font-medium">

@@ -92,6 +92,23 @@ describe('orders service', () => {
     expect(await db.payment.count({ where: { restaurantId: r.id } })).toBe(2);
   });
 
+  it('splits a bill-level tip across per-order payments proportional to their totals', async () => {
+    const { r, table, item } = await fixture();
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 1 }]); // $10
+    await placeOrder(db, r.id, table.id, [{ menuItemId: item.id, quantity: 2 }]); // $20
+
+    const settled = await settleBill(db, r.id, table.id, { method: 'CASH', tip: 6 });
+    expect(settled).toMatchObject({ ok: true, amount: 30, tip: 6, orderCount: 2 });
+
+    const payments = await db.payment.findMany({ where: { restaurantId: r.id }, orderBy: { amount: 'asc' } });
+    expect(payments.map((p) => Number(p.tipAmount))).toEqual([2, 4]); // 1:2 split of 6
+    expect(payments.map((p) => Number(p.amount))).toEqual([12, 24]); // order total + tip share
+    expect(payments.reduce((s, p) => s + Number(p.tipAmount), 0)).toBe(6);
+
+    const orders = await db.order.findMany({ where: { restaurantId: r.id }, orderBy: { total: 'asc' } });
+    expect(orders.map((o) => Number(o.tipAmount))).toEqual([2, 4]);
+  });
+
   it('places tableless online orders without touching table status', async () => {
     const { r, table, item } = await fixture();
     // Occupy the dine-in table so we can prove the online order does not change it.

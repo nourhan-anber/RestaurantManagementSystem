@@ -9,6 +9,7 @@ export interface OrderCheckoutInput {
   subtotalCents: number;
   taxCents?: number;
   taxLabel?: string;
+  tipCents?: number;
   deliveryFeeCents?: number;
   currency?: string;
 }
@@ -54,6 +55,16 @@ export async function createOrderCheckout(input: OrderCheckoutInput): Promise<{ 
         currency,
         product_data: { name: 'Delivery' },
         unit_amount: input.deliveryFeeCents,
+      },
+      quantity: 1,
+    });
+  }
+  if (input.tipCents && input.tipCents > 0) {
+    lineItems.push({
+      price_data: {
+        currency,
+        product_data: { name: 'Tip' },
+        unit_amount: input.tipCents,
       },
       quantity: 1,
     });

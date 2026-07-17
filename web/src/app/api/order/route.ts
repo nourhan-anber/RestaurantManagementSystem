@@ -62,6 +62,7 @@ export async function POST(req: Request) {
     notes: input.notes,
     guestName: input.customerName,
     guestEmail: input.guestEmail,
+    tip: input.tip,
   });
   if (!result.ok) {
     return NextResponse.json({ error: result.reason }, { status: 400 });
@@ -84,6 +85,7 @@ export async function POST(req: Request) {
       subtotalCents: toCents(result.subtotal),
       taxCents: toCents(result.taxAmount),
       taxLabel: restaurant.taxLabel,
+      tipCents: input.tip ? toCents(input.tip) : 0,
       deliveryFeeCents,
     });
     if (checkout) {

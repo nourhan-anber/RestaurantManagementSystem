@@ -10,6 +10,7 @@ import {
   salesByPaymentMethod,
   salesByType,
   salesSummary,
+  tipsTotal,
   topCustomers,
   topItems,
   topItemsAndCategories,
@@ -167,6 +168,14 @@ describe('reports breakdowns + range', () => {
     expect(byMethod.find((m) => m.method === 'CASH')).toMatchObject({ amount: 20, refunded: 0, net: 20 });
 
     expect(await refundsTotal(db, r.id)).toBe(5);
+  });
+
+  it('totals tips collected over settled payments', async () => {
+    const r = await db.restaurant.create({ data: { name: 'Tipsy', slug: 'tipsy' } });
+    await db.payment.create({ data: { restaurantId: r.id, amount: '23.00', tipAmount: '3.00', method: 'CARD', status: 'SUCCEEDED' } });
+    await db.payment.create({ data: { restaurantId: r.id, amount: '12.00', tipAmount: '2.00', method: 'CASH', status: 'SUCCEEDED' } });
+    await db.payment.create({ data: { restaurantId: r.id, amount: '99.00', tipAmount: '9.00', method: 'ONLINE', status: 'PENDING' } }); // ignored
+    expect(await tipsTotal(db, r.id)).toBe(5);
   });
 
   it('honors the date range', async () => {

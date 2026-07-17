@@ -161,6 +161,19 @@ export async function refundsTotal(
   return Number(agg._sum.refundedAmount ?? 0);
 }
 
+/** Total tips collected (over SUCCEEDED/REFUNDED payments) in the range. */
+export async function tipsTotal(
+  db: PrismaClient,
+  restaurantId: number,
+  range?: DateRange,
+): Promise<number> {
+  const agg = await db.payment.aggregate({
+    where: { restaurantId, status: { in: ['SUCCEEDED', 'REFUNDED'] }, ...createdAtFilter(range) },
+    _sum: { tipAmount: true },
+  });
+  return Number(agg._sum.tipAmount ?? 0);
+}
+
 /** Revenue-ranked top menu items and categories over delivered orders in the range. */
 export async function topItemsAndCategories(
   db: PrismaClient,

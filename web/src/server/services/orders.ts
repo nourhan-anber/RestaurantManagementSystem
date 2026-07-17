@@ -3,6 +3,7 @@ import type { OrderStatus, OrderType } from '@/generated/prisma/enums';
 import { ACTIVE_KITCHEN_STATUSES, TERMINAL_STATUSES } from '@/lib/orders';
 import { priceLine, type ItemSpec } from '@/lib/modifiers';
 import { computeTax } from '@/lib/tax';
+import { allocateTip } from '@/lib/tip';
 import { upsertCustomerForOrder } from '@/server/services/customers';
 import type { SettleBillInput } from '@/lib/validation/payment';
 
@@ -134,14 +135,16 @@ export async function listOrders(
 }
 
 export type SettleResult =
-  | { ok: true; amount: number; orderCount: number }
+  | { ok: true; amount: number; tip: number; orderCount: number }
   | { ok: false; reason: 'empty' };
 
 /**
  * Settle a table's bill in one transaction: mark its active orders delivered
  * (the trigger reopens the table) and record **one Payment per order** so each
- * order links to its payment (the order-detail page reads `order.payments`).
- * Re-settling an already-empty table records nothing.
+ * order links to its payment (the order-detail page reads `order.payments`). A
+ * bill-level `tip` is split across the orders proportional to their totals; each
+ * Payment's `amount` is the order total plus its tip share (what was collected).
+ * Re-settling an already-empty table records nothing. `amount` is the pre-tip bill.
  */
 export async function settleBill(
   db: PrismaClient,
@@ -157,25 +160,29 @@ export async function settleBill(
     if (active.length === 0) return { ok: false, reason: 'empty' };
     const round2 = (n: number) => Math.round(n * 100) / 100;
     const amount = round2(active.reduce((sum, o) => sum + Number(o.total), 0));
+    const tip = round2(input.tip ?? 0);
+    const tipParts = allocateTip(active.map((o) => Number(o.total)), tip);
 
-    await tx.order.updateMany({
-      where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] } },
-      data: { status: 'DELIVERED' },
-    });
+    await Promise.all(
+      active.map((o, i) =>
+        tx.order.update({ where: { id: o.id }, data: { status: 'DELIVERED', tipAmount: tipParts[i] } }),
+      ),
+    );
     await tx.payment.createMany({
-      data: active.map((o) => ({
+      data: active.map((o, i) => ({
         restaurantId,
         tableId,
         orderId: o.id,
-        amount: o.total,
+        amount: round2(Number(o.total) + tipParts[i]),
         taxAmount: o.taxAmount,
+        tipAmount: tipParts[i],
         currency: 'usd',
         method: input.method,
         transactionId: input.transactionId ?? null,
         status: 'SUCCEEDED' as const,
       })),
     });
-    return { ok: true, amount, orderCount: active.length };
+    return { ok: true, amount, tip, orderCount: active.length };
   });
 }
 
@@ -211,6 +218,8 @@ export interface PlaceOrderGuest {
   notes?: string;
   guestName?: string;
   guestEmail?: string;
+  /** Optional gratuity (storefront checkout). Stored on `tipAmount`; `total` stays food+tax. */
+  tip?: number;
 }
 
 /** How an order is fulfilled — dine-in binds a table; online (pickup/delivery) doesn't. */
@@ -345,6 +354,7 @@ async function placeOrderCore(
         subtotal: tax.subtotal,
         taxRatePercent: appliedRate,
         taxAmount: tax.taxAmount,
+        tipAmount: Math.max(0, Math.round((guest.tip ?? 0) * 100) / 100),
         total: tax.total,
         notes: guest.notes ?? null,
         guestName: guest.guestName ?? (online ? fulfillment.customerName : null),
