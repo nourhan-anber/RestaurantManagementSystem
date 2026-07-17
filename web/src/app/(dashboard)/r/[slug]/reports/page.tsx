@@ -16,7 +16,7 @@ import { bucketRevenueByDay, percentOfMax, type RankRow } from '@/lib/reports';
 import { localDayLabel } from '@/lib/datetime';
 import { parseDateRange } from '@/lib/pagination';
 import { formatMoney } from '@/lib/format';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -89,6 +89,19 @@ export default async function ReportsPage({
         </div>
         <Button type="submit" variant="secondary">Apply</Button>
       </form>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <span className="self-center text-xs uppercase tracking-wide text-muted">Export CSV:</span>
+        <a href={`/r/${slug}/reports/export?type=summary&from=${fromStr}&to=${toStr}`} className={buttonClasses({ size: 'sm', variant: 'ghost' })}>
+          Summary
+        </a>
+        <a href={`/r/${slug}/reports/export?type=orders&from=${fromStr}&to=${toStr}`} className={buttonClasses({ size: 'sm', variant: 'ghost' })}>
+          Orders
+        </a>
+        <a href={`/r/${slug}/reports/export?type=customers`} className={buttonClasses({ size: 'sm', variant: 'ghost' })}>
+          Customers
+        </a>
+      </div>
 
       <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
         {tiles.map((t) => (

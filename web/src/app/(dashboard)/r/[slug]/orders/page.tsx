@@ -5,7 +5,7 @@ import { can, findMembership } from '@/server/authz';
 import { db } from '@/server/db';
 import { listOrders } from '@/server/services/orders';
 import { pageInfo, parseDateRange, parsePage } from '@/lib/pagination';
-import { Button } from '@/components/ui/button';
+import { Button, buttonClasses } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { OrderTable } from '../order-table';
@@ -51,6 +51,12 @@ export default async function OrdersPage({
           <Input id="to" name="to" type="date" defaultValue={to ?? ''} className="w-40" />
         </div>
         <Button type="submit" variant="secondary">Filter</Button>
+        <a
+          href={`/r/${slug}/reports/export?type=orders${from ? `&from=${from}` : ''}${to ? `&to=${to}` : ''}`}
+          className={buttonClasses({ size: 'md', variant: 'ghost' })}
+        >
+          Download CSV
+        </a>
         {from || to ? (
           <Link href={`/r/${slug}/orders`} className="pb-2.5 text-sm text-muted hover:text-foreground">
             Clear

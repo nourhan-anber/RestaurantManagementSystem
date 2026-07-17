@@ -3,6 +3,7 @@ import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '@/generated/prisma/client';
 import { placeOnlineOrder, placeOrder } from './orders';
 import {
+  customerExportRows,
   revenueRows,
   salesByPaymentMethod,
   salesByType,
@@ -160,5 +161,15 @@ describe('reports breakdowns + range', () => {
     expect((await salesSummary(db, r.id, future)).orders).toBe(0);
     expect(await salesByType(db, r.id, future)).toEqual([]);
     expect(await revenueRows(db, r.id, future)).toEqual([]);
+  });
+
+  it('customerExportRows gives per-customer spend + counts (sorted by spend)', async () => {
+    const { r } = await scenario();
+    const rows = await customerExportRows(db, r.id);
+    expect(rows.map((c) => [c.name, c.orders, c.spend])).toEqual([
+      ['Ada', 1, 15],
+      ['Bob', 1, 10],
+    ]);
+    expect(rows[0].lastOrderAt).toBeInstanceOf(Date);
   });
 });

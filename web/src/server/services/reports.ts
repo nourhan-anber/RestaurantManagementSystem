@@ -198,6 +198,53 @@ export async function topCustomers(
   }));
 }
 
+export interface CustomerExportRow {
+  id: number;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  orders: number;
+  spend: number; // lifetime, all statuses
+  lastOrderAt: Date | null;
+  createdAt: Date;
+}
+
+/** Every customer with lifetime order count, total spend, and last order — for CSV export. */
+export async function customerExportRows(
+  db: PrismaClient,
+  restaurantId: number,
+): Promise<CustomerExportRow[]> {
+  const [customers, grouped] = await Promise.all([
+    db.customer.findMany({
+      where: { restaurantId },
+      select: { id: true, name: true, phone: true, email: true, createdAt: true },
+    }),
+    db.order.groupBy({
+      by: ['customerId'],
+      where: { restaurantId, customerId: { not: null } },
+      _sum: { total: true },
+      _count: { _all: true },
+      _max: { createdAt: true },
+    }),
+  ]);
+  const stats = new Map(grouped.map((g) => [g.customerId, g]));
+  return customers
+    .map((c) => {
+      const s = stats.get(c.id);
+      return {
+        id: c.id,
+        name: c.name,
+        phone: c.phone,
+        email: c.email,
+        orders: s?._count._all ?? 0,
+        spend: Number(s?._sum.total ?? 0),
+        lastOrderAt: s?._max.createdAt ?? null,
+        createdAt: c.createdAt,
+      };
+    })
+    .sort((a, b) => b.spend - a.spend);
+}
+
 export interface TopItem {
   name: string;
   quantity: number;
