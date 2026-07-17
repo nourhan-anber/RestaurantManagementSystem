@@ -114,8 +114,26 @@ model Restaurant {
   invites        StaffInvite[]
   subscription   Subscription?
   payments       Payment[]
+  customers      Customer[]
 
   @@map("restaurants")
+}
+
+model Customer {
+  id           Int      @id @default(autoincrement())
+  restaurantId Int      @map("restaurant_id")
+  name         String?
+  phone        String? // normalized E.164
+  email        String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  restaurant Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders     Order[]
+
+  @@index([restaurantId, phone])
+  @@index([restaurantId, email])
+  @@map("customers")
 }
 
 model OpeningHours {
@@ -236,6 +254,7 @@ model Order {
   guestEmail      String?     @map("guest_email")
   customerName    String?     @map("customer_name")
   customerPhone   String?     @map("customer_phone")
+  customerId      Int?        @map("customer_id")
   deliveryAddress String?     @map("delivery_address")
   deliveryNotes   String?     @map("delivery_notes")
   requestedTime   DateTime?   @map("requested_time")
@@ -248,12 +267,14 @@ model Order {
 
   restaurant Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   table      Table?      @relation(fields: [tableId], references: [id], onDelete: Restrict)
+  customer   Customer?   @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items      OrderItem[]
   payments   Payment[]
   delivery   Delivery?
 
   @@index([restaurantId, status])
   @@index([tableId])
+  @@index([customerId])
   @@map("orders")
 }
 

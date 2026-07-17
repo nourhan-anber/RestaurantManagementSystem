@@ -42,7 +42,7 @@ const validOnline = {
   slug: 'bella-vista',
   orderType: 'PICKUP' as const,
   customerName: 'Sam',
-  customerPhone: '555-0100',
+  customerPhone: '416-555-0199',
   items: [{ menuItemId: 1, quantity: 2 }],
 };
 
@@ -53,9 +53,11 @@ describe('placeOnlineOrderSchema', () => {
     expect(parsed.orderType).toBe('PICKUP');
   });
 
-  it('requires a customer name and phone', () => {
+  it('requires a customer name and a valid phone', () => {
     expect(placeOnlineOrderSchema.safeParse({ ...validOnline, customerName: '' }).success).toBe(false);
     expect(placeOnlineOrderSchema.safeParse({ ...validOnline, customerPhone: '' }).success).toBe(false);
+    // Well-formed length but not a real number.
+    expect(placeOnlineOrderSchema.safeParse({ ...validOnline, customerPhone: '555-0100' }).success).toBe(false);
   });
 
   it('requires a delivery address for delivery orders', () => {

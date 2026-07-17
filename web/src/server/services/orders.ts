@@ -3,6 +3,7 @@ import type { OrderStatus } from '@/generated/prisma/enums';
 import { ACTIVE_KITCHEN_STATUSES, TERMINAL_STATUSES } from '@/lib/orders';
 import { priceLine, type ItemSpec } from '@/lib/modifiers';
 import { computeTax } from '@/lib/tax';
+import { upsertCustomerForOrder } from '@/server/services/customers';
 import type { SettleBillInput } from '@/lib/validation/payment';
 
 export function listKitchenOrders(db: PrismaClient, restaurantId: number) {
@@ -216,10 +217,19 @@ async function placeOrderCore(
   const appliedRate = tax.taxAmount > 0 ? ratePercent : 0;
 
   const online = fulfillment.kind !== 'dine_in';
+  // Identify the customer (CRM): dine-in may carry a guest email; online carries a
+  // name + phone. Deduped/linked inside the same transaction as the order.
+  const contact =
+    fulfillment.kind === 'dine_in'
+      ? { name: guest.guestName ?? null, phone: null, email: guest.guestEmail ?? null }
+      : { name: fulfillment.customerName, phone: fulfillment.customerPhone, email: guest.guestEmail ?? null };
+
   const order = await db.$transaction(async (tx) => {
+    const customerId = await upsertCustomerForOrder(tx, restaurantId, contact);
     const created = await tx.order.create({
       data: {
         restaurantId,
+        customerId,
         tableId: fulfillment.kind === 'dine_in' ? fulfillment.tableId : null,
         orderType:
           fulfillment.kind === 'dine_in'

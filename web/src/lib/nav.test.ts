@@ -5,11 +5,28 @@ const keys = (role: Parameters<typeof visibleSections>[0]) => visibleSections(ro
 
 describe('visibleSections', () => {
   it('shows the owner every section', () => {
-    expect(keys('OWNER')).toEqual(['menu', 'tables', 'kitchen', 'floor', 'staff', 'reports', 'settings']);
+    expect(keys('OWNER')).toEqual([
+      'menu',
+      'tables',
+      'kitchen',
+      'floor',
+      'staff',
+      'customers',
+      'reports',
+      'settings',
+    ]);
   });
 
   it('hides settings from the manager', () => {
-    expect(keys('MANAGER')).toEqual(['menu', 'tables', 'kitchen', 'floor', 'staff', 'reports']);
+    expect(keys('MANAGER')).toEqual([
+      'menu',
+      'tables',
+      'kitchen',
+      'floor',
+      'staff',
+      'customers',
+      'reports',
+    ]);
   });
 
   it('shows the chef only the kitchen', () => {

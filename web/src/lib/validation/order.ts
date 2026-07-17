@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { isValidPhone } from '@/lib/phone';
 
 export const placeOrderSchema = z.object({
   slug: z.string().min(1),
@@ -38,7 +39,7 @@ export const placeOnlineOrderSchema = z
     slug: z.string().min(1),
     orderType: z.enum(['PICKUP', 'DELIVERY']),
     customerName: z.string().trim().min(1).max(120),
-    customerPhone: z.string().trim().min(5).max(40),
+    customerPhone: z.string().trim().min(5).max(40).refine(isValidPhone, 'Enter a valid phone number.'),
     guestEmail: z.string().trim().email().max(200).optional(),
     notes: z.string().max(500).optional(),
     deliveryAddress: z.string().trim().min(1).max(300).optional(),
