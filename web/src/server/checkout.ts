@@ -1,5 +1,6 @@
 import { getStripe } from './stripe';
 import { requestBaseUrl } from './base-url';
+import { orderCheckoutLineItems } from '@/lib/checkout';
 
 export interface OrderCheckoutInput {
   slug: string;
@@ -16,59 +17,26 @@ export interface OrderCheckoutInput {
 
 /**
  * Create a Stripe Checkout Session (mode: payment) for a placed storefront order.
- * Charges the food subtotal plus any courier fee as separate line items; the
- * orderId travels in metadata so the webhook can record the payment and dispatch.
- * Returns the hosted checkout URL, or null when Stripe isn't configured.
+ * The line items (subtotal + tax/delivery/tip) are assembled by the unit-tested
+ * `orderCheckoutLineItems`; the orderId travels in metadata so the webhook can
+ * record the payment and dispatch. Returns the hosted URL, or null when Stripe
+ * isn't configured.
  */
 export async function createOrderCheckout(input: OrderCheckoutInput): Promise<{ url: string } | null> {
   const stripe = getStripe();
   if (!stripe) return null;
 
   const base = await requestBaseUrl();
-  const currency = input.currency ?? 'usd';
-  const lineItems: Array<{
-    price_data: { currency: string; product_data: { name: string }; unit_amount: number };
-    quantity: number;
-  }> = [
-    {
-      price_data: {
-        currency,
-        product_data: { name: `${input.restaurantName} order #${input.orderId}` },
-        unit_amount: input.subtotalCents,
-      },
-      quantity: 1,
-    },
-  ];
-  if (input.taxCents && input.taxCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency,
-        product_data: { name: input.taxLabel || 'Tax' },
-        unit_amount: input.taxCents,
-      },
-      quantity: 1,
-    });
-  }
-  if (input.deliveryFeeCents && input.deliveryFeeCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency,
-        product_data: { name: 'Delivery' },
-        unit_amount: input.deliveryFeeCents,
-      },
-      quantity: 1,
-    });
-  }
-  if (input.tipCents && input.tipCents > 0) {
-    lineItems.push({
-      price_data: {
-        currency,
-        product_data: { name: 'Tip' },
-        unit_amount: input.tipCents,
-      },
-      quantity: 1,
-    });
-  }
+  const lineItems = orderCheckoutLineItems({
+    restaurantName: input.restaurantName,
+    orderId: input.orderId,
+    currency: input.currency ?? 'usd',
+    subtotalCents: input.subtotalCents,
+    taxCents: input.taxCents,
+    taxLabel: input.taxLabel,
+    deliveryFeeCents: input.deliveryFeeCents,
+    tipCents: input.tipCents,
+  });
 
   const session = await stripe.checkout.sessions.create({
     mode: 'payment',
