@@ -44,7 +44,9 @@ export default async function TenantLayout({
           </span>
         </div>
         <div className="flex items-center gap-4">
-          <span className="hidden text-sm text-muted sm:inline">{session.user.email}</span>
+          <a href="/account" className="hidden text-sm text-muted hover:text-foreground sm:inline">
+            {session.user.email}
+          </a>
           <form
             action={async () => {
               'use server';

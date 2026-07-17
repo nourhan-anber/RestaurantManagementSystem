@@ -22,7 +22,7 @@ const db = new PrismaClient({ adapter });
 
 async function reset() {
   await db.$executeRawUnsafe(
-    'TRUNCATE customers, deliveries, order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, promo_codes, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
+    'TRUNCATE customers, deliveries, order_item_modifiers, order_items, modifier_options, modifier_groups, menu_categories, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, promo_codes, password_reset_tokens, opening_hours, restaurants, users RESTART IDENTITY CASCADE',
   );
 }
 

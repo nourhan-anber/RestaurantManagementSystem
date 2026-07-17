@@ -9,7 +9,7 @@ const db = new PrismaClient({ adapter });
 async function reset() {
   // Throwaway test DB — truncate everything and reset serials between tests.
   await db.$executeRawUnsafe(
-    'TRUNCATE order_items, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, promo_codes, restaurants RESTART IDENTITY CASCADE',
+    'TRUNCATE order_items, orders, menu_items, tables, memberships, staff_invites, subscriptions, payments, promo_codes, password_reset_tokens, restaurants RESTART IDENTITY CASCADE',
   );
 }
 
