@@ -17,7 +17,8 @@ export function isStorefrontTemplate(value: string): value is StorefrontTemplate
 export const DEFAULT_THEME_COLOR = '#d8622d';
 
 /** Expand/validate a hex color to canonical #rrggbb (lowercase), or null. */
-export function normalizeHex(hex: string): string | null {
+export function normalizeHex(hex: string | null | undefined): string | null {
+  if (typeof hex !== 'string') return null;
   const s = hex.trim().toLowerCase();
   if (/^#[0-9a-f]{6}$/.test(s)) return s;
   if (/^#[0-9a-f]{3}$/.test(s)) return `#${s[1]}${s[1]}${s[2]}${s[2]}${s[3]}${s[3]}`;
@@ -28,10 +29,10 @@ export function isValidHexColor(hex: string): boolean {
   return normalizeHex(hex) !== null;
 }
 
-/** Darken a hex color by a fraction (0–1), for a button's hover/pressed shade. */
-export function darkenHex(hex: string, amount = 0.12): string {
-  const norm = normalizeHex(hex);
-  if (!norm) return hex;
+/** Darken a hex color by a fraction (0–1), for a button's hover/pressed shade.
+ *  Falls back to the default accent when given an invalid/missing color. */
+export function darkenHex(hex: string | null | undefined, amount = 0.12): string {
+  const norm = normalizeHex(hex) ?? DEFAULT_THEME_COLOR;
   const n = parseInt(norm.slice(1), 16);
   const scale = (channel: number) => Math.max(0, Math.min(255, Math.round(channel * (1 - amount))));
   const r = scale((n >> 16) & 255);

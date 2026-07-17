@@ -82,11 +82,11 @@ export default async function OrderPage({
       canDeliver={Boolean(restaurant.address)}
       onlinePayment={isOnlinePaymentConfigured()}
       paid={paid === '1'}
-      taxEnabled={restaurant.taxEnabled}
-      taxRatePercent={Number(restaurant.taxRatePercent)}
-      taxLabel={restaurant.taxLabel}
-      template={restaurant.storefrontTemplate}
-      themeColor={restaurant.themeColor}
+      taxEnabled={restaurant.taxEnabled ?? false}
+      taxRatePercent={Number(restaurant.taxRatePercent ?? 0)}
+      taxLabel={restaurant.taxLabel ?? 'Tax'}
+      template={restaurant.storefrontTemplate ?? 'classic'}
+      themeColor={restaurant.themeColor ?? '#d8622d'}
       menu={menu}
     />
   );

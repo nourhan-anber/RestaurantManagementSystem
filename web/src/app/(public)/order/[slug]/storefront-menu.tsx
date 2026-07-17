@@ -10,7 +10,7 @@ import { DIETARY_LABELS } from '@/lib/dietary';
 import { formatMoney } from '@/lib/format';
 import { DAY_LABELS, minutesToHhmm, type DayHours } from '@/lib/hours';
 import { computeTax } from '@/lib/tax';
-import { darkenHex } from '@/lib/storefront';
+import { darkenHex, DEFAULT_THEME_COLOR } from '@/lib/storefront';
 import { useCart } from '@/stores/cart';
 import { ItemCustomizer } from '../../dine/[slug]/[tableNumber]/item-customizer';
 import type { CustomerMenuItem } from '../../dine/[slug]/[tableNumber]/customer-menu';
@@ -93,9 +93,10 @@ export function StorefrontMenu({
 
   // Recolor the whole storefront by overriding the accent CSS variables; Tailwind's
   // opacity variants (bg-ember/10, …) resolve against them via color-mix.
+  const accent = themeColor || DEFAULT_THEME_COLOR;
   const themeStyle = {
-    '--color-ember': themeColor,
-    '--color-ember-600': darkenHex(themeColor),
+    '--color-ember': accent,
+    '--color-ember-600': darkenHex(accent),
   } as CSSProperties;
 
   const inCart = (itemId: number) =>

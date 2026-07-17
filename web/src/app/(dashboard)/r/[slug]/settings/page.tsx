@@ -44,12 +44,12 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
           timezone: restaurant.timezone,
           logoUrl: restaurant.logoUrl,
           onlineOrderingEnabled: restaurant.onlineOrderingEnabled,
-          taxEnabled: restaurant.taxEnabled,
-          taxRatePercent: Number(restaurant.taxRatePercent),
-          taxLabel: restaurant.taxLabel,
-          taxRegion: restaurant.taxRegion,
-          storefrontTemplate: restaurant.storefrontTemplate,
-          themeColor: restaurant.themeColor,
+          taxEnabled: restaurant.taxEnabled ?? false,
+          taxRatePercent: Number(restaurant.taxRatePercent ?? 0),
+          taxLabel: restaurant.taxLabel ?? 'Tax',
+          taxRegion: restaurant.taxRegion ?? null,
+          storefrontTemplate: restaurant.storefrontTemplate ?? 'classic',
+          themeColor: restaurant.themeColor ?? '#d8622d',
         }}
         hours={hours.map((h) => ({
           dayOfWeek: h.dayOfWeek,

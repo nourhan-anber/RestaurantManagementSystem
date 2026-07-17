@@ -22,10 +22,12 @@ describe('normalizeHex / isValidHexColor', () => {
     expect(normalizeHex('#D8622D')).toBe('#d8622d');
   });
 
-  it('rejects invalid colors', () => {
+  it('rejects invalid or missing colors', () => {
     expect(normalizeHex('d8622d')).toBeNull(); // no hash
     expect(normalizeHex('#12345')).toBeNull(); // wrong length
     expect(normalizeHex('#zzzzzz')).toBeNull();
+    expect(normalizeHex(undefined)).toBeNull();
+    expect(normalizeHex(null)).toBeNull();
     expect(isValidHexColor('#abc')).toBe(true);
     expect(isValidHexColor('red')).toBe(false);
   });
@@ -41,7 +43,8 @@ describe('darkenHex', () => {
     expect(darkenHex('#fff', 0.5)).toBe('#808080');
   });
 
-  it('returns the input unchanged for an invalid color', () => {
-    expect(darkenHex('nope')).toBe('nope');
+  it('falls back to the darkened default accent for an invalid/missing color', () => {
+    expect(darkenHex('nope')).toBe(darkenHex('#d8622d'));
+    expect(darkenHex(undefined)).toBe(darkenHex('#d8622d'));
   });
 });
