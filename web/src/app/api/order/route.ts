@@ -25,6 +25,9 @@ export async function POST(req: Request) {
   if (!restaurant.onlineOrderingEnabled) {
     return NextResponse.json({ error: 'online ordering is unavailable' }, { status: 403 });
   }
+  if (restaurant.ordersPaused) {
+    return NextResponse.json({ error: 'not accepting orders right now' }, { status: 409 });
+  }
 
   // A scheduled time can't be in the past.
   if (input.requestedTime && input.requestedTime.getTime() < Date.now() - 60_000) {

@@ -44,6 +44,7 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
           timezone: restaurant.timezone,
           logoUrl: restaurant.logoUrl,
           onlineOrderingEnabled: restaurant.onlineOrderingEnabled,
+          ordersPaused: restaurant.ordersPaused ?? false,
           taxEnabled: restaurant.taxEnabled ?? false,
           taxRatePercent: Number(restaurant.taxRatePercent ?? 0),
           taxLabel: restaurant.taxLabel ?? 'Tax',

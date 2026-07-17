@@ -65,6 +65,7 @@ export function updateRestaurantBranding(
       timezone: input.timezone,
       logoUrl: input.logoUrl ?? null,
       onlineOrderingEnabled: input.onlineOrderingEnabled,
+      ordersPaused: input.ordersPaused ?? false,
       taxEnabled: input.taxEnabled ?? false,
       taxRatePercent: tax.ratePercent,
       taxLabel: tax.label,

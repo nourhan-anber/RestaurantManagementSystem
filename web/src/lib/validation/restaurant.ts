@@ -18,6 +18,7 @@ export const brandingSchema = z.object({
   timezone: z.string().trim().min(1).max(64),
   logoUrl: z.string().trim().url('Enter a valid logo URL.').optional(),
   onlineOrderingEnabled: z.boolean(),
+  ordersPaused: z.boolean().optional(),
   // Tax config: taxRegion selects a preset (whose rate/label win); 'custom'/blank
   // uses taxRatePercent + taxLabel. Resolved server-side in updateRestaurantBranding.
   taxEnabled: z.boolean().optional(),

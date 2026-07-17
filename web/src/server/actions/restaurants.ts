@@ -66,6 +66,7 @@ export async function updateBranding(
     timezone: formData.get('timezone'),
     logoUrl: optional(formData.get('logoUrl')),
     onlineOrderingEnabled: formData.get('onlineOrderingEnabled') === 'on',
+    ordersPaused: formData.get('ordersPaused') === 'on',
     taxEnabled: formData.get('taxEnabled') === 'on',
     taxRegion: optional(formData.get('taxRegion')),
     taxRatePercent: formData.get('taxRatePercent') ?? undefined,

@@ -98,6 +98,7 @@ model Restaurant {
   address               String?
   timezone              String   @default("UTC")
   onlineOrderingEnabled Boolean  @default(false) @map("online_ordering_enabled")
+  ordersPaused          Boolean  @default(false) @map("orders_paused")
   taxEnabled            Boolean  @default(false) @map("tax_enabled")
   taxRatePercent        Decimal  @default(0) @db.Decimal(6, 4) @map("tax_rate_percent")
   taxLabel              String   @default("Tax") @map("tax_label")

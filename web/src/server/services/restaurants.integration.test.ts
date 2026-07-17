@@ -159,11 +159,13 @@ describe('branding + opening hours', () => {
       name: 'Bella Vista',
       timezone: 'America/Toronto',
       onlineOrderingEnabled: true,
+      ordersPaused: true,
       storefrontTemplate: 'banner',
       themeColor: '#1f6f5c',
     });
     const fresh = await db.restaurant.findUniqueOrThrow({ where: { id: restaurantId } });
     expect(fresh.storefrontTemplate).toBe('banner');
     expect(fresh.themeColor).toBe('#1f6f5c');
+    expect(fresh.ordersPaused).toBe(true);
   });
 });

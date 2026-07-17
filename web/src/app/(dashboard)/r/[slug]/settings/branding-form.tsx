@@ -25,6 +25,7 @@ export interface BrandingData {
   timezone: string;
   logoUrl: string | null;
   onlineOrderingEnabled: boolean;
+  ordersPaused: boolean;
   taxEnabled: boolean;
   taxRatePercent: number;
   taxLabel: string;
@@ -86,6 +87,16 @@ export function BrandingForm({
         <label className="flex items-center gap-2 text-sm text-foreground">
           <input type="checkbox" name="onlineOrderingEnabled" defaultChecked={restaurant.onlineOrderingEnabled} className="size-4 accent-[var(--color-ember)]" />
           Online ordering enabled
+        </label>
+        <label className="flex items-start gap-2 rounded-[var(--radius)] border border-ember/40 bg-ember/5 px-3 py-2.5 text-sm text-foreground">
+          <input type="checkbox" name="ordersPaused" defaultChecked={restaurant.ordersPaused} className="mt-0.5 size-4 accent-[var(--color-ember)]" />
+          <span>
+            <span className="font-medium">Pause new orders (we&rsquo;re busy)</span>
+            <span className="mt-0.5 block text-xs text-muted">
+              Temporarily stop accepting online orders — the storefront stays visible but checkout is
+              blocked. Turn off when you&rsquo;re ready again.
+            </span>
+          </span>
         </label>
         <p className="text-xs text-muted">
           Storefront:{' '}

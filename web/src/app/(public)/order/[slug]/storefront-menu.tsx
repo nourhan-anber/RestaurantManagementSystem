@@ -35,6 +35,7 @@ export function StorefrontMenu({
   open,
   hours,
   timeZone,
+  ordersPaused,
   canDeliver,
   onlinePayment,
   paid,
@@ -54,6 +55,7 @@ export function StorefrontMenu({
   open: boolean;
   hours: DayHours[];
   timeZone: string;
+  ordersPaused: boolean;
   canDeliver: boolean;
   onlinePayment: boolean;
   paid: boolean;
@@ -470,7 +472,11 @@ export function StorefrontMenu({
                     <span className="text-muted">Subtotal</span>
                     <span className="font-medium tabular-nums text-foreground">{formatMoney(subtotal)}</span>
                   </div>
-                  {!open ? (
+                  {ordersPaused ? (
+                    <p role="alert" className="text-sm text-ember-600">
+                      {restaurantName} is busy and isn&rsquo;t accepting orders right now. Please check back soon.
+                    </p>
+                  ) : !open ? (
                     <p className={`text-sm ${scheduleSlots.length > 0 ? 'text-muted' : 'text-ember-600'}`}>
                       {scheduleSlots.length > 0
                         ? `${restaurantName} is closed right now — you can schedule an order for later.`
@@ -480,7 +486,7 @@ export function StorefrontMenu({
                   <Button
                     className="w-full"
                     size="lg"
-                    disabled={lines.length === 0 || !canOrderNowOrLater}
+                    disabled={lines.length === 0 || ordersPaused || !canOrderNowOrLater}
                     onClick={() => setStep('fulfillment')}
                   >
                     Continue
