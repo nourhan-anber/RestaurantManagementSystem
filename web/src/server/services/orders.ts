@@ -1,0 +1,492 @@
+import type { PrismaClient } from '@/generated/prisma/client';
+import type { OrderStatus, OrderType } from '@/generated/prisma/enums';
+import { ACTIVE_KITCHEN_STATUSES, TERMINAL_STATUSES } from '@/lib/orders';
+import { priceLine, type ItemSpec } from '@/lib/modifiers';
+import { allocateTip } from '@/lib/tip';
+import { applyDiscount, orderTotals, validatePromo } from '@/lib/discount';
+import { normalizeCode } from '@/server/services/promos';
+import { upsertCustomerForOrder } from '@/server/services/customers';
+import type { SettleBillInput } from '@/lib/validation/payment';
+
+export function listKitchenOrders(db: PrismaClient, restaurantId: number) {
+  return db.order.findMany({
+    where: { restaurantId, status: { in: [...ACTIVE_KITCHEN_STATUSES] } },
+    orderBy: { createdAt: 'asc' },
+    include: {
+      table: { select: { number: true } },
+      items: {
+        orderBy: { id: 'asc' },
+        include: {
+          menuItem: { select: { name: true } },
+          modifiers: { select: { optionName: true }, orderBy: { id: 'asc' } },
+        },
+      },
+    },
+  });
+}
+
+/** Tenant-scoped status change; the DB trigger reopens the table on terminal states. */
+export function advanceOrderStatus(
+  db: PrismaClient,
+  restaurantId: number,
+  orderId: number,
+  status: OrderStatus,
+) {
+  return db.order.updateMany({ where: { id: orderId, restaurantId }, data: { status } });
+}
+
+export function listFloor(db: PrismaClient, restaurantId: number) {
+  return db.table.findMany({
+    where: { restaurantId, isActive: true },
+    orderBy: { number: 'asc' },
+    include: {
+      orders: {
+        where: { status: { notIn: [...TERMINAL_STATUSES] } },
+        orderBy: { createdAt: 'asc' },
+        include: { items: { include: { menuItem: { select: { name: true } } } } },
+      },
+    },
+  });
+}
+
+/** Full order for the single-order detail view (items + modifiers, payments, delivery). */
+export function getOrderDetail(db: PrismaClient, restaurantId: number, orderId: number) {
+  return db.order.findFirst({
+    where: { id: orderId, restaurantId },
+    include: {
+      items: {
+        orderBy: { id: 'asc' },
+        include: { menuItem: { select: { name: true } }, modifiers: { orderBy: { id: 'asc' } } },
+      },
+      table: { select: { number: true } },
+      customer: { select: { id: true, name: true, phone: true, email: true } },
+      payments: { orderBy: { createdAt: 'asc' } },
+      delivery: true,
+    },
+  });
+}
+
+/** Public, PII-free order snapshot for the customer status page (resolved by token). */
+export function getPublicOrderStatus(db: PrismaClient, restaurantId: number, orderId: number) {
+  return db.order.findFirst({
+    where: { id: orderId, restaurantId },
+    select: {
+      id: true,
+      status: true,
+      orderType: true,
+      createdAt: true,
+      requestedTime: true,
+      items: {
+        orderBy: { id: 'asc' },
+        select: { quantity: true, menuItem: { select: { name: true } } },
+      },
+      delivery: { select: { status: true, trackingUrl: true, provider: true } },
+    },
+  });
+}
+
+export interface OrderListItem {
+  id: number;
+  createdAt: Date;
+  requestedTime: Date | null;
+  orderType: OrderType;
+  status: OrderStatus;
+  subtotal: number;
+  taxAmount: number;
+  total: number;
+  customerName: string | null;
+  tableNumber: number | null;
+  itemCount: number;
+}
+
+export interface ListOrdersOptions {
+  customerId?: number;
+  from?: Date;
+  to?: Date;
+  skip?: number;
+  take?: number;
+}
+
+/**
+ * Tenant-scoped order history, newest first — for the restaurant orders page and a
+ * customer's order history. Optionally filtered by customer and a createdAt range,
+ * and paginated. Returns the page rows plus the total matching count.
+ */
+export async function listOrders(
+  db: PrismaClient,
+  restaurantId: number,
+  opts: ListOrdersOptions = {},
+): Promise<{ rows: OrderListItem[]; total: number }> {
+  const where = {
+    restaurantId,
+    ...(opts.customerId ? { customerId: opts.customerId } : {}),
+    ...(opts.from || opts.to
+      ? { createdAt: { ...(opts.from ? { gte: opts.from } : {}), ...(opts.to ? { lte: opts.to } : {}) } }
+      : {}),
+  };
+  const [orders, total] = await Promise.all([
+    db.order.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      skip: opts.skip,
+      take: opts.take,
+      include: {
+        table: { select: { number: true } },
+        _count: { select: { items: true } },
+      },
+    }),
+    db.order.count({ where }),
+  ]);
+
+  const rows: OrderListItem[] = orders.map((o) => ({
+    id: o.id,
+    createdAt: o.createdAt,
+    requestedTime: o.requestedTime,
+    orderType: o.orderType,
+    status: o.status,
+    subtotal: Number(o.subtotal),
+    taxAmount: Number(o.taxAmount),
+    total: Number(o.total),
+    customerName: o.customerName ?? o.guestName,
+    tableNumber: o.table?.number ?? null,
+    itemCount: o._count.items,
+  }));
+  return { rows, total };
+}
+
+export type SettleResult =
+  | { ok: true; amount: number; tip: number; discount: number; orderCount: number; orderIds: number[] }
+  | { ok: false; reason: 'empty' };
+
+/**
+ * Settle a table's bill in one transaction: mark its active orders delivered
+ * (the trigger reopens the table) and record **one Payment per order** so each
+ * order links to its payment (the order-detail page reads `order.payments`).
+ *
+ * An optional manager `discount` (comp) is split across the orders proportional to
+ * their subtotals and re-taxed on the discounted base (see lib/discount); an optional
+ * bill-level `tip` is split proportional to the post-discount totals. Each Payment's
+ * `amount` is that order's post-discount total plus its tip share (what was
+ * collected). `amount` in the result is the post-discount, pre-tip bill.
+ *
+ * Pass `orderIds` to settle only a subset of the table's open orders (split the
+ * check); the rest stay open and the table stays occupied until all are settled.
+ */
+export async function settleBill(
+  db: PrismaClient,
+  restaurantId: number,
+  tableId: number,
+  input: SettleBillInput,
+): Promise<SettleResult> {
+  return db.$transaction(async (tx) => {
+    const selected = input.orderIds?.length ? { id: { in: input.orderIds } } : {};
+    const active = await tx.order.findMany({
+      where: { restaurantId, tableId, status: { notIn: [...TERMINAL_STATUSES] }, ...selected },
+      select: { id: true, subtotal: true, discountAmount: true, taxRatePercent: true },
+    });
+    if (active.length === 0) return { ok: false, reason: 'empty' };
+    const round2 = (n: number) => Math.round(n * 100) / 100;
+
+    // Distribute a bill-level comp across orders proportional to their subtotals, on
+    // top of any discount already on the order, then re-tax each on its discounted base.
+    const comp = round2(input.discount ?? 0);
+    const compParts = allocateTip(active.map((o) => Number(o.subtotal)), comp);
+    const reason = input.discountReason?.trim() || (comp > 0 ? 'Comp' : null);
+
+    const recomputed = active.map((o, i) => {
+      const rate = Number(o.taxRatePercent);
+      const totalDiscount = round2(Number(o.discountAmount) + compParts[i]);
+      const t = orderTotals(Number(o.subtotal), totalDiscount, rate, rate > 0);
+      return { id: o.id, discount: t.discount, taxAmount: t.taxAmount, total: t.total };
+    });
+
+    const amount = round2(recomputed.reduce((sum, r) => sum + r.total, 0));
+    const tip = round2(input.tip ?? 0);
+    const tipParts = allocateTip(recomputed.map((r) => r.total), tip);
+
+    await Promise.all(
+      recomputed.map((r, i) =>
+        tx.order.update({
+          where: { id: r.id },
+          data: {
+            status: 'DELIVERED',
+            discountAmount: r.discount,
+            ...(compParts[i] > 0 ? { discountReason: reason } : {}),
+            taxAmount: r.taxAmount,
+            total: r.total,
+            tipAmount: tipParts[i],
+          },
+        }),
+      ),
+    );
+    await tx.payment.createMany({
+      data: recomputed.map((r, i) => ({
+        restaurantId,
+        tableId,
+        orderId: r.id,
+        amount: round2(r.total + tipParts[i]),
+        taxAmount: r.taxAmount,
+        tipAmount: tipParts[i],
+        currency: 'usd',
+        method: input.method,
+        transactionId: input.transactionId ?? null,
+        status: 'SUCCEEDED' as const,
+      })),
+    });
+    return { ok: true, amount, tip, discount: comp, orderCount: active.length, orderIds: recomputed.map((r) => r.id) };
+  });
+}
+
+export type CancelResult = { ok: true } | { ok: false; reason: 'not_found' | 'already_terminal' };
+
+/** Cancel an active order → CANCELLED (the DB trigger reopens its table). Tenant-scoped. */
+export async function cancelOrder(
+  db: PrismaClient,
+  restaurantId: number,
+  orderId: number,
+  reason?: string,
+): Promise<CancelResult> {
+  const order = await db.order.findFirst({ where: { id: orderId, restaurantId }, select: { status: true } });
+  if (!order) return { ok: false, reason: 'not_found' };
+  if (TERMINAL_STATUSES.includes(order.status)) return { ok: false, reason: 'already_terminal' };
+  await db.order.update({
+    where: { id: orderId },
+    data: { status: 'CANCELLED', cancelReason: reason?.trim() || null },
+  });
+  return { ok: true };
+}
+
+// ─────────────────────── Order placement ───────────────────────
+
+export interface PlaceOrderItem {
+  menuItemId: number;
+  quantity: number;
+  notes?: string;
+  optionIds?: number[];
+}
+
+export interface PlaceOrderGuest {
+  notes?: string;
+  guestName?: string;
+  guestEmail?: string;
+  /** Optional gratuity (storefront checkout). Stored on `tipAmount`; `total` stays food+tax. */
+  tip?: number;
+  /** Optional promo code (storefront checkout) — validated + redeemed at placement. */
+  promoCode?: string;
+}
+
+/** How an order is fulfilled — dine-in binds a table; online (pickup/delivery) doesn't. */
+export type Fulfillment =
+  | { kind: 'dine_in'; tableId: number }
+  | { kind: 'pickup'; customerName: string; customerPhone: string; requestedTime?: Date }
+  | {
+      kind: 'delivery';
+      customerName: string;
+      customerPhone: string;
+      deliveryAddress: string;
+      deliveryNotes?: string;
+      requestedTime?: Date;
+    };
+
+export type PlaceOrderResult =
+  | { ok: true; orderId: number; subtotal: number; discount: number; taxAmount: number; total: number }
+  | { ok: false; reason: 'table' | 'items' | 'fulfillment' };
+
+/**
+ * Shared order writer for dine-in and online. Base prices, option deltas, and the
+ * total are computed server-side from the DB (the client only sends option ids);
+ * options are validated against each item's groups and stored as immutable
+ * snapshots. Dine-in binds a table (INSERT trigger occupies it); online passes a
+ * null tableId (trigger no-op, enforced by DB CHECKs). Everything is tenant-scoped.
+ */
+async function placeOrderCore(
+  db: PrismaClient,
+  restaurantId: number,
+  fulfillment: Fulfillment,
+  items: PlaceOrderItem[],
+  guest: PlaceOrderGuest = {},
+): Promise<PlaceOrderResult> {
+  if (fulfillment.kind === 'dine_in') {
+    const table = await db.table.findFirst({
+      where: { id: fulfillment.tableId, restaurantId, isActive: true },
+    });
+    if (!table) return { ok: false, reason: 'table' };
+  } else if (fulfillment.kind === 'delivery' && !fulfillment.deliveryAddress) {
+    return { ok: false, reason: 'fulfillment' };
+  }
+
+  const ids = items.map((i) => i.menuItemId);
+  const menu = await db.menuItem.findMany({
+    where: { id: { in: ids }, restaurantId, isAvailable: true },
+    select: {
+      id: true,
+      price: true,
+      modifierGroups: {
+        select: {
+          id: true,
+          name: true,
+          minSelect: true,
+          maxSelect: true,
+          options: { select: { id: true, name: true, priceDelta: true, isAvailable: true } },
+        },
+      },
+    },
+  });
+  if (menu.length !== new Set(ids).size) return { ok: false, reason: 'items' };
+
+  const specById = new Map<number, ItemSpec>(
+    menu.map((m) => [
+      m.id,
+      {
+        id: m.id,
+        basePrice: Number(m.price),
+        groups: m.modifierGroups.map((g) => ({
+          id: g.id,
+          name: g.name,
+          minSelect: g.minSelect,
+          maxSelect: g.maxSelect,
+          options: g.options.map((o) => ({
+            id: o.id,
+            name: o.name,
+            priceDelta: Number(o.priceDelta),
+            isAvailable: o.isAvailable,
+          })),
+        })),
+      },
+    ]),
+  );
+
+  // Price + validate every line before writing anything.
+  const lines: Array<{
+    item: PlaceOrderItem;
+    unitPrice: number;
+    snapshots: { optionId: number; groupName: string; optionName: string; priceDelta: number }[];
+  }> = [];
+  for (const it of items) {
+    const spec = specById.get(it.menuItemId);
+    if (!spec) return { ok: false, reason: 'items' };
+    const result = priceLine(spec, it.optionIds ?? []);
+    if (!result.ok) return { ok: false, reason: 'items' };
+    lines.push({ item: it, unitPrice: result.line.unitPrice, snapshots: result.line.snapshots });
+  }
+
+  const subtotal = lines.reduce((sum, l) => sum + l.unitPrice * l.item.quantity, 0);
+
+  // Server-authoritative sales tax (add-on): read the restaurant's config and
+  // snapshot the applied rate + amount onto the order so history stays correct.
+  const taxConfig = await db.restaurant.findUnique({
+    where: { id: restaurantId },
+    select: { taxEnabled: true, taxRatePercent: true },
+  });
+  const ratePercent = Number(taxConfig?.taxRatePercent ?? 0);
+  const enabled = taxConfig?.taxEnabled ?? false;
+
+  const online = fulfillment.kind !== 'dine_in';
+  // Identify the customer (CRM): dine-in may carry a guest email; online carries a
+  // name + phone. Deduped/linked inside the same transaction as the order.
+  const contact =
+    fulfillment.kind === 'dine_in'
+      ? { name: guest.guestName ?? null, phone: null, email: guest.guestEmail ?? null }
+      : { name: fulfillment.customerName, phone: fulfillment.customerPhone, email: guest.guestEmail ?? null };
+
+  const result = await db.$transaction(async (tx) => {
+    const customerId = await upsertCustomerForOrder(tx, restaurantId, contact);
+
+    // Resolve + redeem a promo code (if supplied and valid). The discount reduces the
+    // pre-tax subtotal; tax is then charged on the discounted base (see lib/discount).
+    let discount = 0;
+    let promoApplied: string | null = null;
+    let discountReason: string | null = null;
+    const codeInput = guest.promoCode ? normalizeCode(guest.promoCode) : '';
+    if (codeInput) {
+      const promo = await tx.promoCode.findUnique({
+        where: { restaurantId_code: { restaurantId, code: codeInput } },
+      });
+      if (promo && validatePromo(promo, new Date()).ok) {
+        discount = applyDiscount(subtotal, { kind: promo.kind, value: Number(promo.value) });
+        if (discount > 0) {
+          promoApplied = promo.code;
+          discountReason = `Promo ${promo.code}`;
+          await tx.promoCode.update({ where: { id: promo.id }, data: { usedCount: { increment: 1 } } });
+        }
+      }
+    }
+
+    const totals = orderTotals(subtotal, discount, ratePercent, enabled);
+    const appliedRate = totals.taxAmount > 0 ? ratePercent : 0;
+
+    const created = await tx.order.create({
+      data: {
+        restaurantId,
+        customerId,
+        tableId: fulfillment.kind === 'dine_in' ? fulfillment.tableId : null,
+        orderType:
+          fulfillment.kind === 'dine_in'
+            ? 'DINE_IN'
+            : fulfillment.kind === 'pickup'
+              ? 'PICKUP'
+              : 'DELIVERY',
+        subtotal: totals.subtotal,
+        discountAmount: totals.discount,
+        discountReason,
+        promoCode: promoApplied,
+        taxRatePercent: appliedRate,
+        taxAmount: totals.taxAmount,
+        tipAmount: Math.max(0, Math.round((guest.tip ?? 0) * 100) / 100),
+        total: totals.total,
+        notes: guest.notes ?? null,
+        guestName: guest.guestName ?? (online ? fulfillment.customerName : null),
+        guestEmail: guest.guestEmail ?? null,
+        customerName: online ? fulfillment.customerName : null,
+        customerPhone: online ? fulfillment.customerPhone : null,
+        deliveryAddress: fulfillment.kind === 'delivery' ? fulfillment.deliveryAddress : null,
+        deliveryNotes: fulfillment.kind === 'delivery' ? (fulfillment.deliveryNotes ?? null) : null,
+        requestedTime: online ? (fulfillment.requestedTime ?? null) : null,
+      },
+    });
+    for (const l of lines) {
+      await tx.orderItem.create({
+        data: {
+          orderId: created.id,
+          menuItemId: l.item.menuItemId,
+          quantity: l.item.quantity,
+          unitPrice: l.unitPrice,
+          notes: l.item.notes ?? null,
+          modifiers: { create: l.snapshots },
+        },
+      });
+    }
+    return { orderId: created.id, totals };
+  });
+
+  return {
+    ok: true,
+    orderId: result.orderId,
+    subtotal: result.totals.subtotal,
+    discount: result.totals.discount,
+    taxAmount: result.totals.taxAmount,
+    total: result.totals.total,
+  };
+}
+
+/** Dine-in order placement (unchanged contract): the current /api/orders route + tests use this. */
+export function placeOrder(
+  db: PrismaClient,
+  restaurantId: number,
+  tableId: number,
+  items: PlaceOrderItem[],
+  guest: PlaceOrderGuest = {},
+): Promise<PlaceOrderResult> {
+  return placeOrderCore(db, restaurantId, { kind: 'dine_in', tableId }, items, guest);
+}
+
+/** Online (pickup/delivery) order placement — no table. Used by the storefront. */
+export function placeOnlineOrder(
+  db: PrismaClient,
+  restaurantId: number,
+  fulfillment: Extract<Fulfillment, { kind: 'pickup' | 'delivery' }>,
+  items: PlaceOrderItem[],
+  guest: PlaceOrderGuest = {},
+): Promise<PlaceOrderResult> {
+  return placeOrderCore(db, restaurantId, fulfillment, items, guest);
+}
